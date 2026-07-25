@@ -40,3 +40,5 @@ relevant-repos
 *.diff.png
 .aider*
 test-results/
+.yalc
+yalc.lock

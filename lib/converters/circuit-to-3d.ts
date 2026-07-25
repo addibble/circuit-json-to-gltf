@@ -1,6 +1,7 @@
 import { cju, findBoundsAndCenter } from "@tscircuit/circuit-json-util"
 import type {
   CadComponent,
+  CadFdmEnclosure,
   CircuitJson,
   PcbCutout,
   PcbHole,
@@ -537,6 +538,47 @@ export async function convertCircuitJsonTo3D(
       if (hasFootprinterModel && !showBoundingBoxes) continue
       box.color = componentColor
     }
+
+    boxes.push(box)
+  }
+
+  // Generated enclosure parts. These are typed CAD records with no PCB owner:
+  // the JSCAD plan is already authored in Circuit world coordinates, so unlike
+  // imported assets there is no origin, board-normal, anchor, or object-fit
+  // normalization to apply -- `position` and `rotation` alone place it.
+  const cadFdmEnclosures = (db.cad_fdm_enclosure?.list?.() ??
+    []) as CadFdmEnclosure[]
+  for (const enclosure of cadFdmEnclosures) {
+    if (!enclosure.model_jscad) continue
+
+    const box: Box3D = {
+      center: {
+        x: enclosure.position.x,
+        y: enclosure.position.z,
+        z: enclosure.position.y,
+      },
+      size: enclosure.size
+        ? convertCadSizeToSceneSize(enclosure.size)
+        : { x: 1, y: 1, z: 1 },
+      isTranslucent: enclosure.show_as_translucent_model,
+      label: enclosure.name,
+      color: componentColor,
+    }
+
+    if (enclosure.rotation) {
+      box.rotation = convertRotationFromCadRotation({
+        x: enclosure.rotation.x,
+        y: enclosure.rotation.z, // Circuit Z rotation becomes scene Y rotation
+        z: enclosure.rotation.y, // Circuit Y rotation becomes scene Z rotation
+      })
+    }
+
+    box.mesh = loadJscadPlan(enclosure.model_jscad)
+    const modelScaleFactor = enclosure.model_unit_to_mm_scale_factor ?? 1
+    if (modelScaleFactor !== 1) {
+      box.mesh = scaleMesh(box.mesh, modelScaleFactor)
+    }
+    box.size = getBoundingBoxSize(box.mesh.boundingBox)
 
     boxes.push(box)
   }

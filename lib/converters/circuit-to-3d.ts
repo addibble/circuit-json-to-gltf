@@ -560,7 +560,13 @@ export async function convertCircuitJsonTo3D(
       size: enclosure.size
         ? convertCadSizeToSceneSize(enclosure.size)
         : { x: 1, y: 1, z: 1 },
-      isTranslucent: enclosure.show_as_translucent_model,
+      // Always see-through. An enclosure is the one part on the board whose
+      // entire job is to be around everything else, so an opaque one hides the
+      // thing being reviewed. Callers that want the shell solid can still turn
+      // it off per part in a viewer -- this is the render default, not a
+      // property recorded in the circuit JSON, where it would have made a
+      // presentation choice part of the manufacturing artifact.
+      isTranslucent: true,
       label: enclosure.name,
       color: componentColor,
     }

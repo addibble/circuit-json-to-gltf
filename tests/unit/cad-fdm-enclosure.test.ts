@@ -35,6 +35,7 @@ const circuitJsonWith = (overrides: Record<string, unknown> = {}): any[] => [
     cad_fdm_enclosure_id: "cad_enclosure_1",
     source_fdm_enclosure_id: "enclosure_1",
     name: "EN1.base",
+    enclosure_part: "base",
     position: { x: 1, y: 2, z: 3 },
     size: { x: 14, y: 10, z: 6 },
     model_jscad: openTopBoxPlan,
@@ -63,16 +64,28 @@ test("renders cad_fdm_enclosure parts without a PCB owner", async () => {
   expect(box.size.z).toBeCloseTo(10)
 })
 
-test("cad_fdm_enclosure translucency is per part", async () => {
-  const opaque = await convertCircuitJsonTo3D(circuitJsonWith() as any, {
+/**
+ * An enclosure is the one part whose job is to surround everything else, so an
+ * opaque one hides the board it was generated from -- and reviewing the fit
+ * between openings and parts is the reason to render it at all.
+ *
+ * This is a render default, deliberately not read from the record: how a part
+ * is shown is a property of looking at it, not of the part, and putting it in
+ * the circuit JSON made a presentation choice part of the artifact that
+ * manufacturing reads.
+ */
+test("enclosure parts render see-through, whatever the record says", async () => {
+  const scene = await convertCircuitJsonTo3D(circuitJsonWith() as any, {
     renderBoardTextures: false,
     showBoundingBoxes: false,
   })
-  const translucent = await convertCircuitJsonTo3D(
-    circuitJsonWith({ show_as_translucent_model: true }) as any,
+
+  expect(scene.boxes[0]!.isTranslucent).toBe(true)
+
+  // A stray flag on the record changes nothing: the viewer owns this now.
+  const withStrayFlag = await convertCircuitJsonTo3D(
+    circuitJsonWith({ show_as_translucent_model: false }) as any,
     { renderBoardTextures: false, showBoundingBoxes: false },
   )
-
-  expect(opaque.boxes[0]!.isTranslucent).toBeFalsy()
-  expect(translucent.boxes[0]!.isTranslucent).toBe(true)
+  expect(withStrayFlag.boxes[0]!.isTranslucent).toBe(true)
 })

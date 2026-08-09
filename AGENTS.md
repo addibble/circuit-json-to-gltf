@@ -72,10 +72,10 @@ Consequences that are easy to get wrong:
 treated front as +Y while `3d-viewer`'s `Front` camera preset is −Y, and that
 disagreement caused most of the defects in this area. Name the axis outright.
 
-There is a standing proposal to consolidate the duplicated per-format
-normalization here and in `3d-viewer`: `tscircuit/rfc`,
-`rfcs/2026-07-22-coordinate-frame-consolidation.md`. Read it before adding
-another format-specific rotation table.
+The current enclosure/frame contract is documented in the parametric-enclosures
+RFC's **Faces** and **Aperture projection** sections. Read those together with
+this file before adding another format-specific rotation table; the older
+standalone coordinate-frame RFC was retired.
 
 ### Testing geometry
 

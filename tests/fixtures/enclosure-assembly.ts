@@ -44,6 +44,115 @@ export const PCB_SCREW_MODEL = "screw_m3_l8_socketcap"
 export const LID_BOLT_MODEL = "bolt_m3_l10_socketcap"
 export const INSERT_MODEL = "heatsetinsert_m3_l5.7"
 
+/**
+ * How each material is hatched where the section plane cuts it.
+ *
+ * Engineering section views distinguish materials by hatch as well as by
+ * colour, and here it is not decoration: `gltf-slice` applies a single cap
+ * material to a whole document, so a bolt cut inside a boss is drawn with the
+ * boss's hatch and disappears into it. Slicing each material separately and
+ * merging the results is what makes the fastener legible in its own hole.
+ *
+ * Hatch colours are 0-255 RGBA, matching gltf-slice.
+ */
+export const MATERIAL_GROUPS = [
+  {
+    key: "enclosure",
+    matches: (name: string) => /^ENCLOSURE/.test(name),
+    includesBoard: false,
+    // Wide, pale hatch: the moulded shell is the background of the drawing.
+    hatch: {
+      spacing: 18,
+      lineWidth: 2,
+      background: [214, 210, 205, 255],
+      lineColor: [150, 145, 138, 255],
+    },
+  },
+  {
+    key: "board",
+    matches: () => false,
+    includesBoard: true,
+    hatch: {
+      spacing: 8,
+      lineWidth: 2,
+      background: [22, 105, 55, 255],
+      lineColor: [10, 60, 30, 255],
+    },
+  },
+  {
+    key: "screw",
+    matches: (name: string) => /^PCB_SCREW/.test(name),
+    includesBoard: false,
+    // Dense fine hatch, the convention for steel.
+    hatch: {
+      spacing: 6,
+      lineWidth: 2,
+      background: [150, 168, 190, 255],
+      lineColor: [40, 60, 85, 255],
+    },
+  },
+  {
+    key: "bolt",
+    matches: (name: string) => /^LID_BOLT/.test(name),
+    includesBoard: false,
+    // Dark body, light lines -- inverted so it cannot be mistaken for a screw.
+    hatch: {
+      spacing: 6,
+      lineWidth: 2,
+      background: [58, 60, 66, 255],
+      lineColor: [170, 175, 185, 255],
+    },
+  },
+  {
+    key: "insert",
+    matches: (name: string) => /^LID_INSERT/.test(name),
+    includesBoard: false,
+    // Brass, hatched coarsely against the bolt's fine steel.
+    hatch: {
+      spacing: 11,
+      lineWidth: 3,
+      background: [198, 152, 48, 255],
+      lineColor: [110, 78, 12, 255],
+    },
+  },
+] as const
+
+/**
+ * An isometric camera looking square-on at a section face.
+ *
+ * `getBestCameraPosition` frames the whole assembly, which points the camera
+ * wherever the bounding box suggests -- for a section that is usually *away*
+ * from the cut, giving a view of an intact-looking outside. A section view has
+ * to be aimed at the cut deliberately.
+ *
+ * `sectionNormalSceneZ` is the scene-Z direction the cut face points, which is
+ * the opposite of the half that was kept: keeping `z+` leaves a face looking
+ * toward `-z`. The camera sits on that side, raised and offset equally on the
+ * other two axes for an isometric three-quarter view, with a narrow field of
+ * view so the result reads as near-orthographic rather than perspective.
+ */
+export const getSectionCameraOptions = ({
+  sectionNormalSceneZ,
+  distance = 78,
+}: {
+  sectionNormalSceneZ: -1 | 1
+  distance?: number
+}) => {
+  const lookAt: [number, number, number] = [0, 1, 9 * -sectionNormalSceneZ]
+  return {
+    camPos: [
+      lookAt[0] + distance,
+      lookAt[1] + distance * 0.82,
+      lookAt[2] + distance * sectionNormalSceneZ,
+    ] as [number, number, number],
+    lookAt,
+    up: "y+" as const,
+    fov: 28,
+    ambient: 0.32,
+    backgroundColor: "#ffffff",
+  }
+}
+
 const cuboid = (
   size: [number, number, number],
   center: [number, number, number],
@@ -51,6 +160,34 @@ const cuboid = (
   type: "translate" as const,
   vector: center,
   shape: { type: "cuboid" as const, size },
+})
+
+/**
+ * Materials, as RGB.
+ *
+ * A section is unreadable when every part is the same grey -- a screw inside a
+ * boss simply reads as more boss. These are stated as jscad `colorize`
+ * operations so the colour travels with the model rather than being a property
+ * of the scene: the loader lifts it out and it beats the renderer's single
+ * `componentColor`.
+ */
+export const MATERIALS = {
+  /** Moulded enclosure: light warm grey. */
+  enclosure: [0.82, 0.8, 0.78],
+  /** Lid, a shade darker so the joint line reads. */
+  lid: [0.68, 0.66, 0.64],
+  /** Zinc-plated steel screw: cool light grey. */
+  screw: [0.75, 0.78, 0.82],
+  /** Black-oxide socket-cap bolt: dark, clearly not the screw. */
+  bolt: [0.24, 0.25, 0.28],
+  /** Brass heat-set insert. */
+  insert: [0.78, 0.6, 0.2],
+} as const
+
+const colorize = (color: readonly number[], shape: unknown) => ({
+  type: "colorize" as const,
+  color: [...color] as number[],
+  shape,
 })
 
 const cylinder = (
@@ -96,7 +233,9 @@ const buildBase = () => ({
       cylinder(7, FLOOR_Z, BOARD_BOTTOM_Z, p.x, p.y),
     ),
     // Corner bosses carrying the inserts.
-    ...LID_BOLT_POSITIONS.map((p) => cylinder(9, FLOOR_Z, WALL_TOP_Z, p.x, p.y)),
+    ...LID_BOLT_POSITIONS.map((p) =>
+      cylinder(9, FLOOR_Z, WALL_TOP_Z, p.x, p.y),
+    ),
   ],
 })
 
@@ -121,13 +260,11 @@ const addPart = (
     name,
     position,
     model,
-    color,
     showHiddenEdges,
   }: {
     name: string
     position: { x: number; y: number; z: number }
     model: unknown
-    color?: { r: number; g: number; b: number }
     showHiddenEdges?: boolean
   },
 ) => {
@@ -160,7 +297,6 @@ const addPart = (
       position,
       rotation: { x: 0, y: 0, z: 0 },
       model_jscad: model,
-      ...(color ? { color } : {}),
       ...(showHiddenEdges ? { show_hidden_edges: true } : {}),
     } as never,
   )
@@ -168,7 +304,9 @@ const addPart = (
 
 export const buildEnclosureAssemblyCircuitJson = ({
   showHiddenEdges = false,
-}: { showHiddenEdges?: boolean } = {}): CircuitJson => {
+}: {
+  showHiddenEdges?: boolean
+} = {}): CircuitJson => {
   const circuitJson: CircuitJson = [] as unknown as CircuitJson
 
   circuitJson.push({
@@ -185,15 +323,13 @@ export const buildEnclosureAssemblyCircuitJson = ({
   addPart(circuitJson, {
     name: "ENCLOSURE_BASE",
     position: { x: 0, y: 0, z: 0 },
-    model: buildBase(),
-    color: { r: 0.55, g: 0.58, b: 0.62 },
+    model: colorize(MATERIALS.enclosure, buildBase()),
     showHiddenEdges,
   })
   addPart(circuitJson, {
     name: "ENCLOSURE_LID",
     position: { x: 0, y: 0, z: 0 },
-    model: buildLid(),
-    color: { r: 0.62, g: 0.65, b: 0.7 },
+    model: colorize(MATERIALS.lid, buildLid()),
     showHiddenEdges,
   })
 
@@ -202,8 +338,10 @@ export const buildEnclosureAssemblyCircuitJson = ({
     addPart(circuitJson, {
       name: `PCB_SCREW_${index + 1}`,
       position: { x: p.x, y: p.y, z: BOARD_TOP_Z },
-      model: getAssemblyHardwareModel(PCB_SCREW_MODEL),
-      color: { r: 0.8, g: 0.82, b: 0.85 },
+      model: colorize(
+        MATERIALS.screw,
+        getAssemblyHardwareModel(PCB_SCREW_MODEL),
+      ),
     })
   })
 
@@ -212,14 +350,12 @@ export const buildEnclosureAssemblyCircuitJson = ({
     addPart(circuitJson, {
       name: `LID_BOLT_${index + 1}`,
       position: { x: p.x, y: p.y, z: LID_TOP_Z },
-      model: getAssemblyHardwareModel(LID_BOLT_MODEL),
-      color: { r: 0.8, g: 0.82, b: 0.85 },
+      model: colorize(MATERIALS.bolt, getAssemblyHardwareModel(LID_BOLT_MODEL)),
     })
     addPart(circuitJson, {
       name: `LID_INSERT_${index + 1}`,
       position: { x: p.x, y: p.y, z: WALL_TOP_Z },
-      model: getAssemblyHardwareModel(INSERT_MODEL),
-      color: { r: 0.72, g: 0.55, b: 0.25 },
+      model: colorize(MATERIALS.insert, getAssemblyHardwareModel(INSERT_MODEL)),
     })
   })
 

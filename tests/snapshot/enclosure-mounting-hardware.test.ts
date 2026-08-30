@@ -1,47 +1,54 @@
 import { expect, test } from "bun:test"
 import type { CircuitJson } from "circuit-json"
-import { sliceGLB } from "gltf-slice"
+import { NodeIO } from "@gltf-transform/core"
+import { renderGLTFToPNGFromGLB } from "poppygl"
 import { convertCircuitJsonToGltf } from "../../lib"
 import {
-  BOARD_TOP_Z,
   buildEnclosureAssemblyCircuitJson,
+  getSectionCameraOptions,
   LID_BOLT_POSITIONS,
   PCB_SCREW_POSITIONS,
 } from "../fixtures/enclosure-assembly"
-import { renderGlbToPng } from "../renderGlbToPng"
+import { buildSectionedGlbByMaterial } from "../fixtures/section-by-material"
 
 /**
  * Section views of enclosure mounting hardware.
  *
  * Hardware is interesting exactly where it is hidden, so a closed enclosure
- * renders as a featureless box -- the first snapshot here proves only that the
- * lid is on. The section views are what answer the question the hardware exists
- * to raise: does each fastener reach its counterpart, and does it clear the
- * board.
+ * renders as a featureless box -- the first snapshot proves only that the lid
+ * is on. The sections are what answer the question the hardware exists to
+ * raise: does each fastener reach its counterpart, and does it clear the board.
  *
  * ## The axis mapping
  *
  * Circuit JSON is Z-up; the glTF scene is Y-up, and the converter maps
  * `scene(X, Y, Z) = circuit(x, z, y)`. So a section plane at a constant circuit
- * **y** is gltf-slice's **xy** plane offset along scene **z**. Measured from
- * the built GLB rather than derived, because the node translation and the mesh
+ * **y** is gltf-slice's **xy** plane offset along scene **z**. Measured from a
+ * built GLB rather than derived, because the node translation and the mesh
  * transform are applied in different places.
  */
 const CIRCUIT_Y_TO_SCENE_Z = (y: number) => y
 
+const RENDER = { width: 700, height: 520 } as const
+
+/** Every section is viewed square-on to the cut, so the camera never hides it. */
+const SECTION_VIEW = getSectionCameraOptions({ sectionNormalSceneZ: -1 })
+
 const buildGlb = async (circuitJson: CircuitJson) =>
-  (await convertCircuitJsonToGltf(circuitJson as never, {
-    format: "glb",
-  } as never)) as ArrayBuffer
+  (await convertCircuitJsonToGltf(
+    circuitJson as never,
+    {
+      format: "glb",
+    } as never,
+  )) as ArrayBuffer
 
 test("enclosure mounting hardware - closed assembly", async () => {
   const circuitJson = buildEnclosureAssemblyCircuitJson()
   const glb = await buildGlb(circuitJson)
 
-  expect(await renderGlbToPng(glb, circuitJson, {
-    width: 640,
-    height: 480,
-  })).toMatchPngSnapshot(import.meta.path, "closed-assembly")
+  expect(
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
+  ).toMatchPngSnapshot(import.meta.path, "closed-assembly")
 })
 
 /**
@@ -49,59 +56,36 @@ test("enclosure mounting hardware - closed assembly", async () => {
  * passes through the middle of each of them.
  */
 test("enclosure mounting hardware - section through the PCB screws", async () => {
-  const circuitJson = buildEnclosureAssemblyCircuitJson()
-  const glb = await buildGlb(circuitJson)
-
-  const sectioned = await sliceGLB(new Uint8Array(glb), {
-    plane: "xy",
+  const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(PCB_SCREW_POSITIONS[0]!.y),
     side: "z+",
   })
 
   expect(
-    await renderGlbToPng(sectioned.buffer as ArrayBuffer, circuitJson, {
-      width: 640,
-      height: 480,
-    }),
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
   ).toMatchPngSnapshot(import.meta.path, "section-through-pcb-screws")
 })
 
 /**
  * A section on the corner mounts' Y axis, cutting the two bolts on the near
- * side and the inserts they thread into -- the pair whose engagement is the
- * thing worth looking at.
+ * side and the inserts they thread into.
  *
- * The *near* row and the far half are kept deliberately: cutting the far row
- * and keeping the near half shaves off an outer strip and leaves the lid whole,
- * so the cut face points away from the camera and the view shows nothing.
+ * The *near* row is cut and the far half kept, deliberately: cutting the far
+ * row and keeping the near half shaves off an outer strip, leaves the lid
+ * whole, and points the cut face away from the camera -- a view that shows
+ * nothing while looking like it worked.
  */
 test("enclosure mounting hardware - section through the lid bolts and inserts", async () => {
-  const circuitJson = buildEnclosureAssemblyCircuitJson()
-  const glb = await buildGlb(circuitJson)
-
-  const sectioned = await sliceGLB(new Uint8Array(glb), {
-    plane: "xy",
+  const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(LID_BOLT_POSITIONS[0]!.y),
     side: "z+",
   })
 
   expect(
-    await renderGlbToPng(sectioned.buffer as ArrayBuffer, circuitJson, {
-      width: 640,
-      height: 480,
-    }),
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
   ).toMatchPngSnapshot(import.meta.path, "section-through-lid-bolts")
 })
 
-/**
- * The fasteners alone.
- *
- * `componentColor` is a single global option rather than a per-part colour, so
- * in a section everything is the same grey and a screw inside a boss reads as
- * part of the boss. Dropping the shell is currently the only way to see the
- * hardware as hardware, and it is also the view that fails loudly if a piece is
- * misplaced.
- */
 test("enclosure mounting hardware - fasteners without the shell", async () => {
   const circuitJson = (
     buildEnclosureAssemblyCircuitJson() as unknown as Array<{
@@ -118,30 +102,44 @@ test("enclosure mounting hardware - fasteners without the shell", async () => {
 
   const glb = await buildGlb(circuitJson)
 
-  expect(await renderGlbToPng(glb, circuitJson, {
-    width: 640,
-    height: 480,
-  })).toMatchPngSnapshot(import.meta.path, "fasteners-only")
+  expect(
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
+  ).toMatchPngSnapshot(import.meta.path, "fasteners-only")
 })
 
 /**
- * A snapshot only fails when someone looks at it, so the section is also
- * asserted numerically: the cut must remove the half of the assembly it was
- * asked to remove, and must not remove the fasteners it was aimed at.
+ * A snapshot only fails when somebody looks at it, so the property the section
+ * exists for is also asserted directly: each material must reach the cut with
+ * its OWN cap material.
+ *
+ * gltf-slice assigns one cap material per document, so a single slice pass
+ * draws every cut face with the same hatch and a bolt cut inside a boss
+ * disappears into the boss. If this collapses back to one material the images
+ * will still look plausible -- which is exactly why it is checked here.
  */
-test("a section keeps the half it was asked for", async () => {
-  const circuitJson = buildEnclosureAssemblyCircuitJson()
-  const glb = await buildGlb(circuitJson)
+test("each material is hatched separately at the cut", async () => {
+  const glb = await buildSectionedGlbByMaterial({ zOffset: 0, side: "z+" })
+  const document = await new NodeIO().readBinary(new Uint8Array(glb))
 
-  const sectioned = await sliceGLB(new Uint8Array(glb), {
-    plane: "xy",
-    zOffset: CIRCUIT_Y_TO_SCENE_Z(0),
-    side: "z+",
-  })
+  const capMaterials = document
+    .getRoot()
+    .listMaterials()
+    .map((material) => material.getName())
+    .filter((name) => name.startsWith("section_"))
 
-  expect(sectioned.byteLength).toBeGreaterThan(0)
-  // The screws seat on the board's top face, which is well inside the kept
-  // half, so a cut on their own axis must leave them standing.
-  expect(BOARD_TOP_Z).toBeGreaterThan(0)
-  expect(PCB_SCREW_POSITIONS.every((p) => p.y === 0)).toBe(true)
+  expect(capMaterials).toEqual(
+    expect.arrayContaining([
+      "section_enclosure",
+      "section_board",
+      "section_screw",
+    ]),
+  )
+  // Each cap material must carry its own hatch image, not share one.
+  const capTextures = document
+    .getRoot()
+    .listMaterials()
+    .filter((material) => material.getName().startsWith("section_"))
+    .map((material) => material.getBaseColorTexture())
+  expect(capTextures.every((texture) => texture !== null)).toBe(true)
+  expect(new Set(capTextures).size).toBe(capTextures.length)
 })

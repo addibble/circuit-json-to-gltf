@@ -528,8 +528,11 @@ export async function convertCircuitJsonTo3D(
         console.error(`Failed to load STEP from ${model_step_url}:`, err)
       }
     } else if (model_jscad) {
-      box.mesh = loadJscadPlan(model_jscad)
-      box.color = componentColor
+      const jscadMesh = loadJscadPlan(model_jscad)
+      box.mesh = jscadMesh
+      // A colour the plan stated itself wins over the scene-wide default: the
+      // part knows its own material, the scene only knows a fallback.
+      box.color = jscadMesh.color ?? componentColor
     } else if (hasFootprinterModel && cad.footprinter_string) {
       box.mesh = await loadFootprinterModel(
         cad.footprinter_string,

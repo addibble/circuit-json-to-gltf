@@ -69,6 +69,16 @@ export interface BoundingBox {
 export interface STLMesh {
   triangles: Triangle[]
   boundingBox: BoundingBox
+  /**
+   * A colour the model carried itself, from a jscad `colorize` operation.
+   *
+   * A generated part knows its own material -- a heat-set insert is brass, a
+   * screw is steel -- and that is a property of the part, not of the scene it
+   * lands in. When present it takes precedence over the renderer's single
+   * `componentColor`, which otherwise paints every jscad model the same grey
+   * and makes a screw inside a boss indistinguishable from the boss.
+   */
+  color?: Color
 }
 
 export interface OBJMesh extends STLMesh {

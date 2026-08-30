@@ -22,7 +22,19 @@ export const BOARD = { width: 40, height: 24, thickness: 1.6 }
 export const BOARD_TOP_Z = BOARD.thickness / 2
 export const BOARD_BOTTOM_Z = -BOARD.thickness / 2
 
-export const FLOOR_Z = -8
+/**
+ * The base is deep enough that the mount stack fits INSIDE it.
+ *
+ * A boss has to swallow the insert plus the relief beyond the bolt tip, and the
+ * floor still needs material under that. At FLOOR_Z = -8 it did not: the relief
+ * bottomed at exactly -8 and broke out through the underside of the enclosure.
+ * The boss is made taller by dropping the floor, rather than by shortening the
+ * relief, because the relief is a real requirement and the floor thickness is
+ * the thing that was implicitly assumed rather than stated.
+ */
+export const FLOOR_Z = -10
+/** Solid material under the cavity, and the minimum left beneath a mount. */
+export const FLOOR_THICKNESS = 2.5
 export const WALL_TOP_Z = 4
 export const LID_TOP_Z = 6
 
@@ -52,6 +64,10 @@ export const LID_BOLT_POSITIONS = [
 ]
 
 export const PCB_SCREW_MODEL = "screw_m3_l6_socketcap"
+/** Kept in step with PCB_SCREW_MODEL, so the pilot hole follows the screw. */
+export const PCB_SCREW_LENGTH = 6
+/** Clearance beyond the screw tip, so it clamps instead of bottoming out. */
+export const SCREW_BOTTOM_CLEARANCE = 1.8
 export const LID_BOLT_MODEL = "bolt_m3_l12_socketcap"
 export const INSERT_MODEL = "heatsetinsert_m3_l5.7"
 /** Kept in step with INSERT_MODEL: the boss is bored to receive exactly this. */
@@ -332,8 +348,20 @@ const cylinder = (
   },
 })
 
-const OUTER = { width: 50, height: 34 }
-const CAVITY = { width: 45, height: 29 }
+/**
+ * The cavity clears the board by BOARD_CLEARANCE per side and no more -- 2.5mm
+ * of air around a 40mm board is most of a wall thickness of wasted envelope.
+ */
+const BOARD_CLEARANCE = 0.4
+const WALL_THICKNESS = 2.5
+const CAVITY = {
+  width: BOARD.width + BOARD_CLEARANCE * 2,
+  height: BOARD.height + BOARD_CLEARANCE * 2,
+}
+const OUTER = {
+  width: CAVITY.width + WALL_THICKNESS * 2,
+  height: CAVITY.height + WALL_THICKNESS * 2,
+}
 
 /** The enclosure base: a tray, with a boss under each fastener. */
 /**
@@ -358,10 +386,14 @@ const buildBase = () => ({
               [OUTER.width, OUTER.height, WALL_TOP_Z - FLOOR_Z],
               [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2],
             ),
-            // The cavity is open at the top, so it runs past WALL_TOP_Z.
+            // The cavity sits on the floor slab and is open at the top.
             cuboid(
-              [CAVITY.width, CAVITY.height, WALL_TOP_Z - FLOOR_Z],
-              [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2 + 2.5],
+              [
+                CAVITY.width,
+                CAVITY.height,
+                WALL_TOP_Z + 2 - (FLOOR_Z + FLOOR_THICKNESS),
+              ],
+              [0, 0, (FLOOR_Z + FLOOR_THICKNESS + WALL_TOP_Z + 2) / 2],
             ),
           ],
         },
@@ -383,7 +415,17 @@ const buildBase = () => ({
     // section. An M3 x 6 seats at z=+0.8 and ends at -5.2; the hole runs to
     // -7.0, leaving 1.8mm of relief.
     ...PCB_SCREW_POSITIONS.map((p) =>
-      cylinder(2.4, FLOOR_Z + 1, BOARD_BOTTOM_Z + 0.1, p.x, p.y),
+      cylinder(
+        2.4,
+        // Measured DOWN FROM THE SCREW, not up from the floor. Keyed to the
+        // floor it silently became 3.8mm of relief the moment the base was
+        // deepened -- the same wrong-datum mistake that let the insert relief
+        // break out through the underside.
+        BOARD_TOP_Z - PCB_SCREW_LENGTH - SCREW_BOTTOM_CLEARANCE,
+        BOARD_BOTTOM_Z + 0.1,
+        p.x,
+        p.y,
+      ),
     ),
     // The insert installs into the top of the boss, and the bolt runs past it
     // into a clearance hole, so neither is drawn buried in solid plastic.

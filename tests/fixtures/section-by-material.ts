@@ -16,30 +16,25 @@ import {
  * into the boss. Each material is therefore sliced in its own pass with its own
  * hatch, and the results are merged back into one document.
  *
- * ## Sectioning fasteners, or not
+ * ## Fasteners are sectioned, but not patterned
  *
- * Drafting practice: a screw, bolt, nut, pin or shaft is **not** sectioned when
- * the cutting plane passes along its axis -- it is drawn whole, in elevation --
- * because hatching a solid body of revolution says nothing and only clutters
- * the view. It **is** sectioned when the plane cuts across the axis, where the
- * cut is the only thing that shows the fastener at all: a transverse plane
- * taken from above would otherwise show a bolt head and nothing beneath it.
- *
- * So `sectionFasteners` follows the plane, not taste. A longitudinal cut merges
- * the fastener groups whole; a transverse cut slices them like everything else.
+ * Drafting practice leaves a fastener unsectioned when the plane runs along its
+ * axis. That convention exists for readability, and here it costs more than it
+ * buys: an unsectioned bolt hides the insert it is threaded into, and the pair
+ * is the whole point of the view. So every material is cut, and fasteners are
+ * distinguished by flat colour instead -- see MATERIAL_GROUPS, where their cap
+ * "hatch" is a line the same colour as its ground.
  */
 export const buildSectionedGlbByMaterial = async ({
   plane = "xy",
   zOffset,
   yOffset,
   side,
-  sectionFasteners,
 }: {
   plane?: "xy" | "xz" | "yz"
   zOffset?: number
   yOffset?: number
   side: "z+" | "z-" | "y+" | "y-"
-  sectionFasteners: boolean
 }): Promise<ArrayBuffer> => {
   const full = buildEnclosureAssemblyCircuitJson() as unknown as Array<{
     type: string
@@ -84,30 +79,23 @@ export const buildSectionedGlbByMaterial = async ({
     // arguments; a `hatch` folded into the spec is silently ignored, which
     // renders as every material sharing the default hatch.
     //
-    // A fastener cut along its own axis is drawn whole, so its geometry goes in
-    // unsliced -- including the half on the removed side, which is what "shown
-    // in elevation" means.
-    const shouldSlice = sectionFasteners || !group.isFastener
+    const sliced = await sliceGLB(
+      new Uint8Array(glb),
+      {
+        plane,
+        ...(zOffset === undefined ? {} : { zOffset }),
+        ...(yOffset === undefined ? {} : { yOffset }),
+        side,
+      } as never,
+      {
+        hatch: group.hatch as never,
+        capMaterialName: `section_${group.key}`,
+      },
+    )
 
-    const geometry = shouldSlice
-      ? ((
-          await sliceGLB(
-            new Uint8Array(glb),
-            {
-              plane,
-              ...(zOffset === undefined ? {} : { zOffset }),
-              ...(yOffset === undefined ? {} : { yOffset }),
-              side,
-            } as never,
-            {
-              hatch: group.hatch as never,
-              capMaterialName: `section_${group.key}`,
-            },
-          )
-        ).buffer as ArrayBuffer)
-      : glb
-
-    const doc = await io.readBinary(new Uint8Array(geometry))
+    const doc = await io.readBinary(
+      new Uint8Array(sliced.buffer as ArrayBuffer),
+    )
     if (!merged) {
       merged = doc
       continue

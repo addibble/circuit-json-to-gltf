@@ -23,25 +23,36 @@ export const BOARD_TOP_Z = BOARD.thickness / 2
 export const BOARD_BOTTOM_Z = -BOARD.thickness / 2
 
 export const FLOOR_Z = -8
-export const WALL_TOP_Z = 8
-export const LID_TOP_Z = 10
+export const WALL_TOP_Z = 4
+export const LID_TOP_Z = 6
 
 /** Where the two PCB screws go: on the board's X axis, so y=0 cuts both. */
 export const PCB_SCREW_POSITIONS = [
-  { x: -15, y: 0 },
-  { x: 15, y: 0 },
+  { x: -8, y: 0 },
+  { x: 8, y: 0 },
 ]
 
-/** Corner mounts for the lid, just inside the walls. */
+/**
+ * The corner mounts, at the board's own mounting holes.
+ *
+ * One bolt does three jobs here: it passes through the lid, through the board,
+ * and threads into an insert in a boss that rises from the floor -- so the same
+ * fastener clamps the lid down and holds the board up. The board SITS ON the
+ * bosses, which is why they stop at the board's underside.
+ *
+ * They were previously outside the board, at (+-22, +-14), which grew the
+ * enclosure to make room and still collided with the board corners: a 9mm boss
+ * at x=22 spans 17.5..26.5 against a board reaching x=20.
+ */
 export const LID_BOLT_POSITIONS = [
-  { x: -22, y: -14 },
-  { x: 22, y: -14 },
-  { x: -22, y: 14 },
-  { x: 22, y: 14 },
+  { x: -16, y: -8 },
+  { x: 16, y: -8 },
+  { x: -16, y: 8 },
+  { x: 16, y: 8 },
 ]
 
 export const PCB_SCREW_MODEL = "screw_m3_l6_socketcap"
-export const LID_BOLT_MODEL = "bolt_m3_l10_socketcap"
+export const LID_BOLT_MODEL = "bolt_m3_l12_socketcap"
 export const INSERT_MODEL = "heatsetinsert_m3_l5.7"
 /** Kept in step with INSERT_MODEL: the boss is bored to receive exactly this. */
 export const INSERT_LENGTH = 5.7
@@ -321,8 +332,8 @@ const cylinder = (
   },
 })
 
-const OUTER = { width: 55, height: 39 }
-const CAVITY = { width: 50, height: 34 }
+const OUTER = { width: 50, height: 34 }
+const CAVITY = { width: 45, height: 29 }
 
 /** The enclosure base: a tray, with a boss under each fastener. */
 /**
@@ -358,9 +369,10 @@ const buildBase = () => ({
         ...PCB_SCREW_POSITIONS.map((p) =>
           cylinder(7, FLOOR_Z, BOARD_BOTTOM_Z, p.x, p.y),
         ),
-        // Corner bosses carrying the inserts.
+        // Corner bosses: they rise from the floor and STOP at the board's
+        // underside, because the board rests on them.
         ...LID_BOLT_POSITIONS.map((p) =>
-          cylinder(9, FLOOR_Z, WALL_TOP_Z, p.x, p.y),
+          cylinder(8, FLOOR_Z, BOARD_BOTTOM_Z, p.x, p.y),
         ),
       ],
     },
@@ -373,16 +385,22 @@ const buildBase = () => ({
     ...PCB_SCREW_POSITIONS.map((p) =>
       cylinder(2.4, FLOOR_Z + 1, BOARD_BOTTOM_Z + 0.1, p.x, p.y),
     ),
-    // An insert gets its installation hole, and the bolt beyond it a clearance
-    // hole, so neither is drawn buried in solid plastic.
+    // The insert installs into the top of the boss, and the bolt runs past it
+    // into a clearance hole, so neither is drawn buried in solid plastic.
     ...LID_BOLT_POSITIONS.map((p) =>
-      cylinder(4, WALL_TOP_Z - INSERT_LENGTH, WALL_TOP_Z + 0.1, p.x, p.y),
+      cylinder(
+        4,
+        BOARD_BOTTOM_Z - INSERT_LENGTH,
+        BOARD_BOTTOM_Z + 0.1,
+        p.x,
+        p.y,
+      ),
     ),
     ...LID_BOLT_POSITIONS.map((p) =>
       cylinder(
         3.4,
-        WALL_TOP_Z - INSERT_LENGTH - 3.5,
-        WALL_TOP_Z - INSERT_LENGTH + 0.1,
+        BOARD_BOTTOM_Z - INSERT_LENGTH - 1.5,
+        BOARD_BOTTOM_Z - INSERT_LENGTH + 0.1,
         p.x,
         p.y,
       ),
@@ -471,7 +489,10 @@ export const buildEnclosureAssemblyCircuitJson = ({
   // The screws pass THROUGH the board, so the board is drilled for them.
   // Without this the screw and the board occupy the same space, their section
   // caps are coplanar, and the shank vanishes where it crosses the board.
-  for (const [index, p] of PCB_SCREW_POSITIONS.entries()) {
+  for (const [index, p] of [
+    ...PCB_SCREW_POSITIONS,
+    ...LID_BOLT_POSITIONS,
+  ].entries()) {
     circuitJson.push({
       type: "pcb_hole",
       pcb_hole_id: `pcb_hole_${index}`,
@@ -527,7 +548,7 @@ export const buildEnclosureAssemblyCircuitJson = ({
     })
     addPart(circuitJson, {
       name: `LID_INSERT_${index + 1}`,
-      position: { x: p.x, y: p.y, z: WALL_TOP_Z },
+      position: { x: p.x, y: p.y, z: BOARD_BOTTOM_Z },
       model: colorize(MATERIALS.insert, getAssemblyHardwareModel(INSERT_MODEL)),
     })
   })

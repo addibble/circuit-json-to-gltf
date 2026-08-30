@@ -30,11 +30,23 @@ export const buildSectionedGlbByMaterial = async ({
   zOffset,
   yOffset,
   side,
+  thickness,
 }: {
   plane?: "xy" | "xz" | "yz"
   zOffset?: number
   yOffset?: number
   side: "z+" | "z-" | "y+" | "y-"
+  /**
+   * Keep only a slab this thick at the plane, instead of the whole half.
+   *
+   * A half-space section leaves the entire far side of the assembly standing
+   * behind the cut, and in an elevation that background competes with the thing
+   * being sectioned -- bosses, walls and fasteners the plane never touched.
+   * A thin slab is a CT slice: only what the plane actually passes through.
+   *
+   * gltf-slice cuts one half-space per call, so a slab is two cuts.
+   */
+  thickness?: number
 }): Promise<ArrayBuffer> => {
   const full = buildEnclosureAssemblyCircuitJson() as unknown as Array<{
     type: string
@@ -84,24 +96,30 @@ export const buildSectionedGlbByMaterial = async ({
     // sliceGLB takes the plane spec and the slice options as SEPARATE
     // arguments; a `hatch` folded into the spec is silently ignored, which
     // renders as every material sharing the default hatch.
-    //
-    const sliced = await sliceGLB(
-      new Uint8Array(glb),
-      {
-        plane,
-        ...(zOffset === undefined ? {} : { zOffset }),
-        ...(yOffset === undefined ? {} : { yOffset }),
-        side,
-      } as never,
-      {
-        hatch: group.hatch as never,
-        capMaterialName: `section_${group.key}`,
-      },
-    )
+    const offset = (plane === "xy" ? zOffset : yOffset) ?? 0
+    const offsetKey = plane === "xy" ? "zOffset" : "yOffset"
+    const axis = side[0] as "z" | "y"
+    const cuts = thickness
+      ? [
+          { offset: offset - thickness / 2, side: `${axis}+` },
+          { offset: offset + thickness / 2, side: `${axis}-` },
+        ]
+      : [{ offset, side }]
 
-    const doc = await io.readBinary(
-      new Uint8Array(sliced.buffer as ArrayBuffer),
-    )
+    let geometry: ArrayBuffer = glb
+    for (const cut of cuts) {
+      const result = await sliceGLB(
+        new Uint8Array(geometry),
+        { plane, [offsetKey]: cut.offset, side: cut.side } as never,
+        {
+          hatch: group.hatch as never,
+          capMaterialName: `section_${group.key}`,
+        },
+      )
+      geometry = result.buffer as ArrayBuffer
+    }
+
+    const doc = await io.readBinary(new Uint8Array(geometry))
     if (!merged) {
       merged = doc
       continue

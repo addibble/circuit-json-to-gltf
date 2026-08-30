@@ -35,6 +35,16 @@ const CIRCUIT_Y_TO_SCENE_Z = (y: number) => y
 const RENDER = { width: 700, height: 520 } as const
 
 /**
+ * Longitudinal sections are cut as a thin slab rather than a half.
+ *
+ * Keeping a whole half leaves the far side of the assembly standing behind the
+ * cut, and in a straight-on elevation that background is indistinguishable from
+ * the section -- bosses and fasteners the plane never touched read as though it
+ * had. A slab shows only what the plane passes through, like a CT slice.
+ */
+const SLICE_THICKNESS = 0.1
+
+/**
  * Sections are drawn as straight elevations, square-on to the cut, so lengths
  * in the plane are seen at true relative size. The whole-assembly views stay
  * isometric, where showing the shape matters more than measuring it.
@@ -69,6 +79,7 @@ test("enclosure mounting hardware - section through the PCB screws", async () =>
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(PCB_SCREW_POSITIONS[0]!.y),
     side: "z+",
+    thickness: SLICE_THICKNESS,
   })
 
   expect(
@@ -89,6 +100,7 @@ test("enclosure mounting hardware - section through the lid bolts and inserts", 
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(LID_BOLT_POSITIONS[0]!.y),
     side: "z+",
+    thickness: SLICE_THICKNESS,
   })
 
   expect(

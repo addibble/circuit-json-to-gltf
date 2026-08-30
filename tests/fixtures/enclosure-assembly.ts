@@ -43,6 +43,8 @@ export const LID_BOLT_POSITIONS = [
 export const PCB_SCREW_MODEL = "screw_m3_l8_socketcap"
 export const LID_BOLT_MODEL = "bolt_m3_l10_socketcap"
 export const INSERT_MODEL = "heatsetinsert_m3_l5.7"
+/** Kept in step with INSERT_MODEL: the boss is bored to receive exactly this. */
+export const INSERT_LENGTH = 5.7
 
 /**
  * How each material is hatched where the section plane cuts it.
@@ -116,6 +118,44 @@ export const MATERIAL_GROUPS = [
     },
   },
 ] as const
+
+/**
+ * A straight elevation view, square-on to the section face.
+ *
+ * The drawing convention for a section: the camera sits **on** the cut's normal
+ * with no lateral or vertical offset, so the cut face is flat to the viewer and
+ * everything in the plane is seen at true relative size. That is what makes
+ * engagement and clearance legible -- in an isometric no face is square-on, so
+ * every length in the cut is foreshortened.
+ *
+ * Still an approximation of orthographic, for the same reason as below: poppygl
+ * builds only `mat4.perspective`, so the field of view is narrowed and the
+ * distance grown to match. Depth cues vanish almost entirely in this view, which
+ * is the point -- it should read as a drawing, not as a photograph.
+ */
+export const getSectionElevationCameraOptions = ({
+  sectionNormalSceneZ,
+  distance = 450,
+  fov = 6,
+}: {
+  sectionNormalSceneZ: -1 | 1
+  distance?: number
+  fov?: number
+}) => {
+  const lookAt: [number, number, number] = [0, 2.5, 0]
+  return {
+    camPos: [
+      lookAt[0],
+      lookAt[1],
+      lookAt[2] + distance * sectionNormalSceneZ,
+    ] as [number, number, number],
+    lookAt,
+    up: "y+" as const,
+    fov,
+    ambient: 0.42,
+    backgroundColor: "#ffffff",
+  }
+}
 
 /**
  * An isometric camera looking square-on at a section face.
@@ -226,39 +266,79 @@ const OUTER = { width: 55, height: 39 }
 const CAVITY = { width: 50, height: 34 }
 
 /** The enclosure base: a tray, with a boss under each fastener. */
+/**
+ * The enclosure base: a tray, with a boss under each fastener.
+ *
+ * Each boss is **bored for the fastener it receives**. That is not detail for
+ * its own sake: two solids cannot occupy the same space, and when they do their
+ * section caps are coplanar and fight, so a screw inside a solid boss vanishes
+ * into it. The hole is what makes the fastener legible in section, and it is
+ * what the moulded part would really have.
+ */
 const buildBase = () => ({
-  type: "union" as const,
+  type: "subtract" as const,
   shapes: [
     {
-      type: "subtract" as const,
+      type: "union" as const,
       shapes: [
-        cuboid(
-          [OUTER.width, OUTER.height, WALL_TOP_Z - FLOOR_Z],
-          [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2],
+        {
+          type: "subtract" as const,
+          shapes: [
+            cuboid(
+              [OUTER.width, OUTER.height, WALL_TOP_Z - FLOOR_Z],
+              [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2],
+            ),
+            // The cavity is open at the top, so it runs past WALL_TOP_Z.
+            cuboid(
+              [CAVITY.width, CAVITY.height, WALL_TOP_Z - FLOOR_Z],
+              [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2 + 2.5],
+            ),
+          ],
+        },
+        // Floor bosses the PCB screws thread into.
+        ...PCB_SCREW_POSITIONS.map((p) =>
+          cylinder(7, FLOOR_Z, BOARD_BOTTOM_Z, p.x, p.y),
         ),
-        // The cavity is open at the top, so it runs past WALL_TOP_Z.
-        cuboid(
-          [CAVITY.width, CAVITY.height, WALL_TOP_Z - FLOOR_Z],
-          [0, 0, (FLOOR_Z + WALL_TOP_Z) / 2 + 2.5],
+        // Corner bosses carrying the inserts.
+        ...LID_BOLT_POSITIONS.map((p) =>
+          cylinder(9, FLOOR_Z, WALL_TOP_Z, p.x, p.y),
         ),
       ],
     },
-    // Floor bosses the PCB screws thread into.
+    // A thread-forming screw gets a pilot hole, 0.8x nominal for an M3.
     ...PCB_SCREW_POSITIONS.map((p) =>
-      cylinder(7, FLOOR_Z, BOARD_BOTTOM_Z, p.x, p.y),
+      cylinder(2.4, FLOOR_Z + 1.5, BOARD_BOTTOM_Z + 0.1, p.x, p.y),
     ),
-    // Corner bosses carrying the inserts.
+    // An insert gets its installation hole, and the bolt beyond it a clearance
+    // hole, so neither is drawn buried in solid plastic.
     ...LID_BOLT_POSITIONS.map((p) =>
-      cylinder(9, FLOOR_Z, WALL_TOP_Z, p.x, p.y),
+      cylinder(4, WALL_TOP_Z - INSERT_LENGTH, WALL_TOP_Z + 0.1, p.x, p.y),
+    ),
+    ...LID_BOLT_POSITIONS.map((p) =>
+      cylinder(
+        3.4,
+        WALL_TOP_Z - INSERT_LENGTH - 3.5,
+        WALL_TOP_Z - INSERT_LENGTH + 0.1,
+        p.x,
+        p.y,
+      ),
     ),
   ],
 })
 
-const buildLid = () =>
-  cuboid(
-    [OUTER.width, OUTER.height, LID_TOP_Z - WALL_TOP_Z],
-    [0, 0, (WALL_TOP_Z + LID_TOP_Z) / 2],
-  )
+/** The lid, bored with a clearance hole for each bolt. */
+const buildLid = () => ({
+  type: "subtract" as const,
+  shapes: [
+    cuboid(
+      [OUTER.width, OUTER.height, LID_TOP_Z - WALL_TOP_Z],
+      [0, 0, (WALL_TOP_Z + LID_TOP_Z) / 2],
+    ),
+    ...LID_BOLT_POSITIONS.map((p) =>
+      cylinder(3.4, WALL_TOP_Z - 0.1, LID_TOP_Z + 0.1, p.x, p.y),
+    ),
+  ],
+})
 
 /**
  * Add one part: the three records a rendered piece needs.

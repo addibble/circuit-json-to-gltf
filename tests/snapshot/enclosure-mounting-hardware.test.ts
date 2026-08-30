@@ -6,6 +6,7 @@ import { convertCircuitJsonToGltf } from "../../lib"
 import {
   buildEnclosureAssemblyCircuitJson,
   getSectionCameraOptions,
+  getSectionElevationCameraOptions,
   LID_BOLT_POSITIONS,
   PCB_SCREW_POSITIONS,
 } from "../fixtures/enclosure-assembly"
@@ -31,8 +32,15 @@ const CIRCUIT_Y_TO_SCENE_Z = (y: number) => y
 
 const RENDER = { width: 700, height: 520 } as const
 
-/** Every section is viewed square-on to the cut, so the camera never hides it. */
-const SECTION_VIEW = getSectionCameraOptions({ sectionNormalSceneZ: -1 })
+/**
+ * Sections are drawn as straight elevations, square-on to the cut, so lengths
+ * in the plane are seen at true relative size. The whole-assembly views stay
+ * isometric, where showing the shape matters more than measuring it.
+ */
+const SECTION_VIEW = getSectionElevationCameraOptions({
+  sectionNormalSceneZ: -1,
+})
+const ASSEMBLY_VIEW = getSectionCameraOptions({ sectionNormalSceneZ: -1 })
 
 const buildGlb = async (circuitJson: CircuitJson) =>
   (await convertCircuitJsonToGltf(
@@ -47,7 +55,7 @@ test("enclosure mounting hardware - closed assembly", async () => {
   const glb = await buildGlb(circuitJson)
 
   expect(
-    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...ASSEMBLY_VIEW }),
   ).toMatchPngSnapshot(import.meta.path, "closed-assembly")
 })
 
@@ -103,7 +111,7 @@ test("enclosure mounting hardware - fasteners without the shell", async () => {
   const glb = await buildGlb(circuitJson)
 
   expect(
-    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...SECTION_VIEW }),
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...ASSEMBLY_VIEW }),
   ).toMatchPngSnapshot(import.meta.path, "fasteners-only")
 })
 

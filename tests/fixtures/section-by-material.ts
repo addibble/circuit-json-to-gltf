@@ -55,7 +55,13 @@ export const buildSectionedGlbByMaterial = async ({
 
   for (const group of MATERIAL_GROUPS) {
     const subset = full.filter((element) => {
-      if (element.type === "pcb_board") return group.includesBoard
+      // pcb_hole carries no source_component_id, so it matches no fastener
+      // group -- it has to travel with the board explicitly, or the board is
+      // built solid and every bolt appears to stop at its top face and resume
+      // underneath.
+      if (element.type === "pcb_board" || element.type === "pcb_hole") {
+        return group.includesBoard
+      }
       const name = element.source_component_id
         ? (nameBySourceId.get(element.source_component_id) ?? "")
         : ""

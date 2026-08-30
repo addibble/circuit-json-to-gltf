@@ -450,16 +450,65 @@ const buildBase = () => ({
   ],
 })
 
-/** The lid, bored with a clearance hole for each bolt. */
+/** How far the lid's lip drops into the cavity, and how it fits. */
+const LID_LIP_DEPTH = 2.5
+const LID_LIP_THICKNESS = 2
+/** Slip fit: the lip has to enter the cavity, not interfere with it. */
+const LID_LIP_CLEARANCE = 0.2
+
+/**
+ * The lid: a plate with a lip that registers into the cavity.
+ *
+ * The lip is what makes a lid a lid rather than a cover -- it locates the part
+ * laterally so the bolts are not what stops it sliding, and it closes the seam
+ * against light and dust. A flat plate would leave the joint doing neither.
+ *
+ * It is a rim, not a boss: the outside is the cavity less a slip-fit clearance,
+ * the inside is that less the lip's own wall. It stops well above the corner
+ * bosses -- they end at the board's underside, the lip lives in the headroom --
+ * so the two never meet.
+ */
 const buildLid = () => ({
   type: "subtract" as const,
   shapes: [
-    cuboid(
-      [OUTER.width, OUTER.height, LID_TOP_Z - WALL_TOP_Z],
-      [0, 0, (WALL_TOP_Z + LID_TOP_Z) / 2],
-    ),
+    {
+      type: "union" as const,
+      shapes: [
+        cuboid(
+          [OUTER.width, OUTER.height, LID_TOP_Z - WALL_TOP_Z],
+          [0, 0, (WALL_TOP_Z + LID_TOP_Z) / 2],
+        ),
+        {
+          type: "subtract" as const,
+          shapes: [
+            cuboid(
+              [
+                CAVITY.width - LID_LIP_CLEARANCE * 2,
+                CAVITY.height - LID_LIP_CLEARANCE * 2,
+                LID_LIP_DEPTH,
+              ],
+              [0, 0, WALL_TOP_Z - LID_LIP_DEPTH / 2],
+            ),
+            cuboid(
+              [
+                CAVITY.width - (LID_LIP_CLEARANCE + LID_LIP_THICKNESS) * 2,
+                CAVITY.height - (LID_LIP_CLEARANCE + LID_LIP_THICKNESS) * 2,
+                LID_LIP_DEPTH + 0.2,
+              ],
+              [0, 0, WALL_TOP_Z - LID_LIP_DEPTH / 2],
+            ),
+          ],
+        },
+      ],
+    },
     ...LID_BOLT_POSITIONS.map((p) =>
-      cylinder(3.4, WALL_TOP_Z - 0.1, LID_TOP_Z + 0.1, p.x, p.y),
+      cylinder(
+        3.4,
+        WALL_TOP_Z - LID_LIP_DEPTH - 0.1,
+        LID_TOP_Z + 0.1,
+        p.x,
+        p.y,
+      ),
     ),
   ],
 })

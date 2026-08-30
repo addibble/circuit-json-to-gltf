@@ -125,29 +125,44 @@ export const MATERIAL_GROUPS = [
  * from the cut, giving a view of an intact-looking outside. A section view has
  * to be aimed at the cut deliberately.
  *
+ * ## Isometric, approximately
+ *
+ * True isometric is an *orthographic* projection along a direction making equal
+ * angles with all three axes. poppygl only builds `mat4.perspective` -- there is
+ * no orthographic path -- so this is an approximation: the camera sits on the
+ * equal-offset diagonal (which is the isometric *direction*, exactly), and the
+ * field of view is narrowed to a few degrees with the distance grown to match,
+ * because perspective tends to orthographic as the field of view tends to zero.
+ *
+ * At 6 degrees the convergence left in a 55mm assembly is well under a pixel.
+ * The honest fix is an orthographic projection in poppygl; until then, do not
+ * measure anything off these images.
+ *
  * `sectionNormalSceneZ` is the scene-Z direction the cut face points, which is
  * the opposite of the half that was kept: keeping `z+` leaves a face looking
- * toward `-z`. The camera sits on that side, raised and offset equally on the
- * other two axes for an isometric three-quarter view, with a narrow field of
- * view so the result reads as near-orthographic rather than perspective.
+ * toward `-z`. The camera sits on that side.
  */
 export const getSectionCameraOptions = ({
   sectionNormalSceneZ,
-  distance = 78,
+  distance = 700,
+  fov = 6,
 }: {
   sectionNormalSceneZ: -1 | 1
   distance?: number
+  fov?: number
 }) => {
   const lookAt: [number, number, number] = [0, 1, 9 * -sectionNormalSceneZ]
+  // Equal components along each axis: the isometric direction, (1, 1, ±1)/sqrt(3).
+  const leg = distance / Math.sqrt(3)
   return {
     camPos: [
-      lookAt[0] + distance,
-      lookAt[1] + distance * 0.82,
-      lookAt[2] + distance * sectionNormalSceneZ,
+      lookAt[0] + leg,
+      lookAt[1] + leg,
+      lookAt[2] + leg * sectionNormalSceneZ,
     ] as [number, number, number],
     lookAt,
     up: "y+" as const,
-    fov: 28,
+    fov,
     ambient: 0.32,
     backgroundColor: "#ffffff",
   }

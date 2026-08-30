@@ -69,9 +69,6 @@ test("enclosure mounting hardware - section through the PCB screws", async () =>
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(PCB_SCREW_POSITIONS[0]!.y),
     side: "z+",
-    // Longitudinal: the plane runs along each screw's axis, so they are drawn
-    // whole rather than hatched.
-    sectionFasteners: false,
   })
 
   expect(
@@ -92,7 +89,6 @@ test("enclosure mounting hardware - section through the lid bolts and inserts", 
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(LID_BOLT_POSITIONS[0]!.y),
     side: "z+",
-    sectionFasteners: false,
   })
 
   expect(
@@ -134,7 +130,6 @@ test("enclosure mounting hardware - transverse section above the board", async (
     plane: "xz",
     yOffset: BOARD_TOP_Z + 1.2,
     side: "y-",
-    sectionFasteners: true,
   })
 
   expect(
@@ -156,7 +151,6 @@ test("each material is hatched separately at the cut", async () => {
   const glb = await buildSectionedGlbByMaterial({
     zOffset: 0,
     side: "z+",
-    sectionFasteners: true,
   })
   const document = await new NodeIO().readBinary(new Uint8Array(glb))
 

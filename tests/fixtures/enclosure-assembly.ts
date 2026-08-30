@@ -40,7 +40,7 @@ export const LID_BOLT_POSITIONS = [
   { x: 22, y: 14 },
 ]
 
-export const PCB_SCREW_MODEL = "screw_m3_l8_socketcap"
+export const PCB_SCREW_MODEL = "screw_m3_l6_socketcap"
 export const LID_BOLT_MODEL = "bolt_m3_l10_socketcap"
 export const INSERT_MODEL = "heatsetinsert_m3_l5.7"
 /** Kept in step with INSERT_MODEL: the boss is bored to receive exactly this. */
@@ -92,11 +92,17 @@ export const MATERIAL_GROUPS = [
     isFastener: true,
     // Dense fine hatch, the convention for steel.
     hatch: {
+      // Sectioned but not patterned: a hatch across a fastener competes with
+      // the hatch of the material it sits in, and the pair that matters most --
+      // a bolt inside its insert -- is only ~0.5mm of wall apart. Flat colour
+      // separates them where a pattern muddles them. gltf-slice requires a
+      // lineWidth of at least 1, so "no pattern" is a line the same colour as
+      // the ground.
       size: 512,
-      spacing: 24,
-      lineWidth: 8,
+      spacing: 16,
+      lineWidth: 1,
       background: [150, 168, 190, 255],
-      lineColor: [40, 60, 85, 255],
+      lineColor: [150, 168, 190, 255],
     },
   },
   {
@@ -106,11 +112,17 @@ export const MATERIAL_GROUPS = [
     isFastener: true,
     // Dark body, light lines -- inverted so it cannot be mistaken for a screw.
     hatch: {
+      // Sectioned but not patterned: a hatch across a fastener competes with
+      // the hatch of the material it sits in, and the pair that matters most --
+      // a bolt inside its insert -- is only ~0.5mm of wall apart. Flat colour
+      // separates them where a pattern muddles them. gltf-slice requires a
+      // lineWidth of at least 1, so "no pattern" is a line the same colour as
+      // the ground.
       size: 512,
-      spacing: 24,
-      lineWidth: 8,
+      spacing: 16,
+      lineWidth: 1,
       background: [58, 60, 66, 255],
-      lineColor: [170, 175, 185, 255],
+      lineColor: [58, 60, 66, 255],
     },
   },
   {
@@ -120,11 +132,17 @@ export const MATERIAL_GROUPS = [
     isFastener: true,
     // Brass, hatched coarsely against the bolt's fine steel.
     hatch: {
+      // Sectioned but not patterned: a hatch across a fastener competes with
+      // the hatch of the material it sits in, and the pair that matters most --
+      // a bolt inside its insert -- is only ~0.5mm of wall apart. Flat colour
+      // separates them where a pattern muddles them. gltf-slice requires a
+      // lineWidth of at least 1, so "no pattern" is a line the same colour as
+      // the ground.
       size: 512,
-      spacing: 44,
-      lineWidth: 12,
+      spacing: 16,
+      lineWidth: 1,
       background: [198, 152, 48, 255],
-      lineColor: [110, 78, 12, 255],
+      lineColor: [198, 152, 48, 255],
     },
   },
 ] as const
@@ -346,9 +364,14 @@ const buildBase = () => ({
         ),
       ],
     },
-    // A thread-forming screw gets a pilot hole, 0.8x nominal for an M3.
+    // A thread-forming screw gets a pilot hole, 0.8x nominal for an M3, bored
+    // DEEPER than the screw reaches. That gap is the bottom clearance: a screw
+    // driven onto the bottom of its own hole jacks the boss apart instead of
+    // clamping, so the relief is a real feature and has to be visible in
+    // section. An M3 x 6 seats at z=+0.8 and ends at -5.2; the hole runs to
+    // -7.0, leaving 1.8mm of relief.
     ...PCB_SCREW_POSITIONS.map((p) =>
-      cylinder(2.4, FLOOR_Z + 1.5, BOARD_BOTTOM_Z + 0.1, p.x, p.y),
+      cylinder(2.4, FLOOR_Z + 1, BOARD_BOTTOM_Z + 0.1, p.x, p.y),
     ),
     // An insert gets its installation hole, and the bolt beyond it a clearance
     // hole, so neither is drawn buried in solid plastic.

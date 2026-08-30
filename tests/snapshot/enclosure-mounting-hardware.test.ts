@@ -4,7 +4,9 @@ import { NodeIO } from "@gltf-transform/core"
 import { renderGLTFToPNGFromGLB } from "poppygl"
 import { convertCircuitJsonToGltf } from "../../lib"
 import {
+  BOARD_TOP_Z,
   buildEnclosureAssemblyCircuitJson,
+  getPlanCameraOptions,
   getSectionCameraOptions,
   getSectionElevationCameraOptions,
   LID_BOLT_POSITIONS,
@@ -67,6 +69,9 @@ test("enclosure mounting hardware - section through the PCB screws", async () =>
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(PCB_SCREW_POSITIONS[0]!.y),
     side: "z+",
+    // Longitudinal: the plane runs along each screw's axis, so they are drawn
+    // whole rather than hatched.
+    sectionFasteners: false,
   })
 
   expect(
@@ -87,6 +92,7 @@ test("enclosure mounting hardware - section through the lid bolts and inserts", 
   const glb = await buildSectionedGlbByMaterial({
     zOffset: CIRCUIT_Y_TO_SCENE_Z(LID_BOLT_POSITIONS[0]!.y),
     side: "z+",
+    sectionFasteners: false,
   })
 
   expect(
@@ -116,6 +122,27 @@ test("enclosure mounting hardware - fasteners without the shell", async () => {
 })
 
 /**
+ * A transverse section, on a plane just above the board, seen in plan.
+ *
+ * Here the fasteners ARE sectioned, because the plane cuts across their axes
+ * and the cut is the only thing that shows them: looking down on intact bolts
+ * would show four heads and nothing underneath. The same rule that leaves them
+ * whole in the elevations requires them hatched here.
+ */
+test("enclosure mounting hardware - transverse section above the board", async () => {
+  const glb = await buildSectionedGlbByMaterial({
+    plane: "xz",
+    yOffset: BOARD_TOP_Z + 1.2,
+    side: "y-",
+    sectionFasteners: true,
+  })
+
+  expect(
+    await renderGLTFToPNGFromGLB(glb, { ...RENDER, ...getPlanCameraOptions() }),
+  ).toMatchPngSnapshot(import.meta.path, "transverse-section-above-board")
+})
+
+/**
  * A snapshot only fails when somebody looks at it, so the property the section
  * exists for is also asserted directly: each material must reach the cut with
  * its OWN cap material.
@@ -126,7 +153,11 @@ test("enclosure mounting hardware - fasteners without the shell", async () => {
  * will still look plausible -- which is exactly why it is checked here.
  */
 test("each material is hatched separately at the cut", async () => {
-  const glb = await buildSectionedGlbByMaterial({ zOffset: 0, side: "z+" })
+  const glb = await buildSectionedGlbByMaterial({
+    zOffset: 0,
+    side: "z+",
+    sectionFasteners: true,
+  })
   const document = await new NodeIO().readBinary(new Uint8Array(glb))
 
   const capMaterials = document

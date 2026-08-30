@@ -62,10 +62,12 @@ export const MATERIAL_GROUPS = [
     key: "enclosure",
     matches: (name: string) => /^ENCLOSURE/.test(name),
     includesBoard: false,
+    isFastener: false,
     // Wide, pale hatch: the moulded shell is the background of the drawing.
     hatch: {
-      spacing: 18,
-      lineWidth: 2,
+      size: 512,
+      spacing: 72,
+      lineWidth: 8,
       background: [214, 210, 205, 255],
       lineColor: [150, 145, 138, 255],
     },
@@ -74,9 +76,11 @@ export const MATERIAL_GROUPS = [
     key: "board",
     matches: () => false,
     includesBoard: true,
+    isFastener: false,
     hatch: {
-      spacing: 8,
-      lineWidth: 2,
+      size: 512,
+      spacing: 32,
+      lineWidth: 8,
       background: [22, 105, 55, 255],
       lineColor: [10, 60, 30, 255],
     },
@@ -85,10 +89,12 @@ export const MATERIAL_GROUPS = [
     key: "screw",
     matches: (name: string) => /^PCB_SCREW/.test(name),
     includesBoard: false,
+    isFastener: true,
     // Dense fine hatch, the convention for steel.
     hatch: {
-      spacing: 6,
-      lineWidth: 2,
+      size: 512,
+      spacing: 24,
+      lineWidth: 8,
       background: [150, 168, 190, 255],
       lineColor: [40, 60, 85, 255],
     },
@@ -97,10 +103,12 @@ export const MATERIAL_GROUPS = [
     key: "bolt",
     matches: (name: string) => /^LID_BOLT/.test(name),
     includesBoard: false,
+    isFastener: true,
     // Dark body, light lines -- inverted so it cannot be mistaken for a screw.
     hatch: {
-      spacing: 6,
-      lineWidth: 2,
+      size: 512,
+      spacing: 24,
+      lineWidth: 8,
       background: [58, 60, 66, 255],
       lineColor: [170, 175, 185, 255],
     },
@@ -109,15 +117,48 @@ export const MATERIAL_GROUPS = [
     key: "insert",
     matches: (name: string) => /^LID_INSERT/.test(name),
     includesBoard: false,
+    isFastener: true,
     // Brass, hatched coarsely against the bolt's fine steel.
     hatch: {
-      spacing: 11,
-      lineWidth: 3,
+      size: 512,
+      spacing: 44,
+      lineWidth: 12,
       background: [198, 152, 48, 255],
       lineColor: [110, 78, 12, 255],
     },
   },
 ] as const
+
+/**
+ * A plan view, looking straight down at a transverse section.
+ *
+ * The counterpart to the elevation: the camera sits on scene +Y (circuit +Z)
+ * looking down, so a plane parallel to the board is seen square-on. This is the
+ * view where fasteners MUST be sectioned -- looking down on an intact bolt
+ * shows a head and nothing else.
+ */
+export const getPlanCameraOptions = ({
+  distance = 450,
+  fov = 6,
+}: {
+  distance?: number
+  fov?: number
+} = {}) => {
+  const lookAt: [number, number, number] = [0, 0, 0]
+  return {
+    camPos: [lookAt[0], lookAt[1] + distance, lookAt[2]] as [
+      number,
+      number,
+      number,
+    ],
+    lookAt,
+    // Looking straight down the Y axis, so "up" on screen must be another axis.
+    up: "z+" as const,
+    fov,
+    ambient: 0.42,
+    backgroundColor: "#ffffff",
+  }
+}
 
 /**
  * A straight elevation view, square-on to the section face.
@@ -403,6 +444,20 @@ export const buildEnclosureAssemblyCircuitJson = ({
   showHiddenEdges?: boolean
 } = {}): CircuitJson => {
   const circuitJson: CircuitJson = [] as unknown as CircuitJson
+
+  // The screws pass THROUGH the board, so the board is drilled for them.
+  // Without this the screw and the board occupy the same space, their section
+  // caps are coplanar, and the shank vanishes where it crosses the board.
+  for (const [index, p] of PCB_SCREW_POSITIONS.entries()) {
+    circuitJson.push({
+      type: "pcb_hole",
+      pcb_hole_id: `pcb_hole_${index}`,
+      hole_shape: "circle",
+      hole_diameter: 3.4,
+      x: p.x,
+      y: p.y,
+    } as never)
+  }
 
   circuitJson.push({
     type: "pcb_board",

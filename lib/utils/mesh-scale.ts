@@ -1,5 +1,10 @@
 import type { BoundingBox, OBJMesh, Point3, STLMesh, Triangle } from "../types"
 import { boundsOfTriangles } from "./bounding-box"
+import {
+  applyMat4ToPoint3,
+  mat4,
+  quaternionFromEulerDegrees,
+} from "@tscircuit/circuit-json-util"
 
 function scalePoint(point: Point3, scale: number): Point3 {
   return {
@@ -18,39 +23,13 @@ function scalePointByAxis(point: Point3, scale: Point3): Point3 {
 }
 
 export function rotatePoint(point: Point3, rotationDeg: Point3): Point3 {
-  let { x, y, z } = point
-
-  if (rotationDeg.x !== 0) {
-    const rad = (rotationDeg.x * Math.PI) / 180
-    const cos = Math.cos(rad)
-    const sin = Math.sin(rad)
-    const newY = y * cos - z * sin
-    const newZ = y * sin + z * cos
-    y = newY
-    z = newZ
-  }
-
-  if (rotationDeg.y !== 0) {
-    const rad = (rotationDeg.y * Math.PI) / 180
-    const cos = Math.cos(rad)
-    const sin = Math.sin(rad)
-    const newX = x * cos + z * sin
-    const newZ = -x * sin + z * cos
-    x = newX
-    z = newZ
-  }
-
-  if (rotationDeg.z !== 0) {
-    const rad = (rotationDeg.z * Math.PI) / 180
-    const cos = Math.cos(rad)
-    const sin = Math.sin(rad)
-    const newX = x * cos - y * sin
-    const newY = x * sin + y * cos
-    x = newX
-    y = newY
-  }
-
-  return { x, y, z }
+  return applyMat4ToPoint3(
+    mat4.fromQuat(
+      new Float64Array(16),
+      quaternionFromEulerDegrees(rotationDeg, "zyx"),
+    ),
+    point,
+  )
 }
 
 function scaleTriangle(triangle: Triangle, scale: number): Triangle {

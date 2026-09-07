@@ -22,17 +22,10 @@ import type {
   Point3,
   Scene3D,
 } from "../types"
-import {
-  fitMeshToCadBounds,
-  getMeshOrigin,
-  getMeshWithBoardNormalTransform,
-} from "../utils/cad-mesh-placement"
+import { CAD_TO_SCENE_MATRIX, placeCadMesh } from "../utils/cad-mesh-placement"
+import { getCoordinateTransformMatrix } from "../utils/coordinate-transform"
 import { getDefaultModelTransform } from "../utils/get-default-model-transform"
-import {
-  getBoundingBoxSize,
-  scaleMesh,
-  translateMesh,
-} from "../utils/mesh-scale"
+import { getBoundingBoxSize } from "../utils/mesh-scale"
 import { filterCutoutsForBoard } from "../utils/pcb-board-cutouts"
 import { createBoardMesh } from "../utils/pcb-board-geometry"
 import { createPanelMesh } from "../utils/pcb-panel-geometry"
@@ -370,15 +363,9 @@ export async function convertCircuitJsonTo3D(
     // Check if component is on bottom layer
     const isBottomLayer = pcbComponent?.layer === "bottom"
 
-    const modelScaleFactor = cad.model_unit_to_mm_scale_factor ?? 1
-
     // Determine size
     const size = cad.size
-      ? convertCadSizeToSceneSize({
-          x: cad.size.x * modelScaleFactor,
-          y: cad.size.y * modelScaleFactor,
-          z: cad.size.z * modelScaleFactor,
-        })
+      ? convertCadSizeToSceneSize(cad.size)
       : {
           x: pcbComponent?.width ?? 2,
           y: defaultComponentHeight,
@@ -472,9 +459,10 @@ export async function convertCircuitJsonTo3D(
     // - OBJ models typically have Z-up with origin at the bottom
     // - STL models vary widely
     // - GLB/GLTF have their own conventions
-    const usingGlbCoordinates = Boolean(model_glb_url || model_gltf_url)
-    const usingObjFormat = Boolean(model_obj_url)
-    const usingStepFormat = Boolean(model_step_url)
+    const usingGlbCoordinates =
+      !hasFootprinterModel && (meshType === "glb" || meshType === "gltf")
+    const usingObjFormat = meshType === "obj"
+    const usingStepFormat = meshType === "step"
 
     const defaultTransform = getDefaultModelTransform(cad, {
       coordinateTransform,
@@ -540,36 +528,30 @@ export async function convertCircuitJsonTo3D(
       )
     }
 
-    if (box.mesh && modelScaleFactor !== 1) {
-      box.mesh = scaleMesh(box.mesh, modelScaleFactor)
-    }
-
     if (box.mesh) {
-      box.mesh = getMeshWithBoardNormalTransform(
+      const placed = placeCadMesh(
+        {
+          ...cad,
+          position: { x: center.x, y: center.z, z: center.y },
+          rotation:
+            cad.rotation ??
+            (isBottomLayer ? { x: 180, y: 0, z: 0 } : undefined),
+        },
         box.mesh,
-        cad.model_board_normal_direction,
+        !meshType && model_jscad
+          ? CAD_TO_SCENE_MATRIX
+          : defaultTransform
+            ? getCoordinateTransformMatrix(defaultTransform)
+            : CAD_TO_SCENE_MATRIX,
+        {
+          boardContactPoint: hasFootprinterModel
+            ? { x: 0, y: 0, z: 0 }
+            : undefined,
+        },
       )
-
-      const meshOrigin = getMeshOrigin(cad, box.mesh, {
-        loaderTransform: defaultTransform,
-        modelBoardNormalDirection: cad.model_board_normal_direction,
-      })
-      if (meshOrigin) {
-        box.mesh = translateMesh(box.mesh, {
-          x: -meshOrigin.x,
-          y: -meshOrigin.y,
-          z: -meshOrigin.z,
-        })
-      }
-
-      if (cad.size) {
-        box.mesh = fitMeshToCadBounds(
-          box.mesh,
-          size,
-          cad.model_object_fit ?? "contain_within_bounds",
-        )
-      }
-
+      box.mesh = placed.mesh
+      box.matrix = placed.matrix
+      box.rotation = undefined
       box.size = getBoundingBoxSize(box.mesh.boundingBox)
     }
 

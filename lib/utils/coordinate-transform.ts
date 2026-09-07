@@ -1,97 +1,89 @@
 import type { CoordinateTransformConfig, Point3, Triangle } from "../types"
+import { mat3, vec3 } from "gl-matrix"
+import {
+  applyMat4ToPoint3,
+  composeMat4,
+  mat4,
+  quaternionFromEulerDegrees,
+  type ReadonlyMat4,
+} from "@tscircuit/circuit-json-util"
+
+/** Legacy decoder order: axis map, flips, then extrinsic X, Y, Z degrees. */
+export function getCoordinateTransformMatrix(
+  config: CoordinateTransformConfig,
+): mat4 {
+  const matrix = mat4.identity(new Float64Array(16))
+  const axes = ["x", "y", "z"] as const
+  for (const [row, axis] of axes.entries()) {
+    const mapping = config.axisMapping?.[axis] ?? axis
+    const source = mapping.replace("-", "")
+    const column = axes.findIndex((candidate) => candidate === source)
+    if (column < 0)
+      throw new Error(`Invalid coordinate axis mapping: ${mapping}`)
+    for (let i = 0; i < 3; i++) matrix[i * 4 + row] = 0
+    matrix[column * 4 + row] = mapping.startsWith("-") ? -1 : 1
+  }
+  return composeMat4(
+    mat4.fromQuat(
+      new Float64Array(16),
+      quaternionFromEulerDegrees(
+        {
+          x: config.rotation?.x ?? 0,
+          y: config.rotation?.y ?? 0,
+          z: config.rotation?.z ?? 0,
+        },
+        "zyx",
+      ),
+    ),
+    mat4.fromScaling(new Float64Array(16), [
+      config.flipX ?? 1,
+      config.flipY ?? 1,
+      config.flipZ ?? 1,
+    ]),
+    matrix,
+  )
+}
 
 export function applyCoordinateTransform(
   point: Point3,
   config: CoordinateTransformConfig,
 ): Point3 {
-  let { x, y, z } = point
-
-  // Apply axis mapping first
-  if (config.axisMapping) {
-    const original = { x, y, z }
-
-    if (config.axisMapping.x) {
-      x = getAxisValue(original, config.axisMapping.x)
-    }
-    if (config.axisMapping.y) {
-      y = getAxisValue(original, config.axisMapping.y)
-    }
-    if (config.axisMapping.z) {
-      z = getAxisValue(original, config.axisMapping.z)
-    }
-  }
-
-  // Apply simple flips
-  x *= config.flipX ?? 1
-  y *= config.flipY ?? 1
-  z *= config.flipZ ?? 1
-
-  // Apply rotation (simple rotation around each axis)
-  if (config.rotation) {
-    if (config.rotation.x) {
-      const rad = (config.rotation.x * Math.PI) / 180
-      const cos = Math.cos(rad)
-      const sin = Math.sin(rad)
-      const newY = y * cos - z * sin
-      const newZ = y * sin + z * cos
-      y = newY
-      z = newZ
-    }
-
-    if (config.rotation.y) {
-      const rad = (config.rotation.y * Math.PI) / 180
-      const cos = Math.cos(rad)
-      const sin = Math.sin(rad)
-      const newX = x * cos + z * sin
-      const newZ = -x * sin + z * cos
-      x = newX
-      z = newZ
-    }
-
-    if (config.rotation.z) {
-      const rad = (config.rotation.z * Math.PI) / 180
-      const cos = Math.cos(rad)
-      const sin = Math.sin(rad)
-      const newX = x * cos - y * sin
-      const newY = x * sin + y * cos
-      x = newX
-      y = newY
-    }
-  }
-
-  return { x, y, z }
+  return applyMat4ToPoint3(getCoordinateTransformMatrix(config), point)
 }
 
-function getAxisValue(original: Point3, mapping: string): number {
-  switch (mapping) {
-    case "x":
-      return original.x
-    case "y":
-      return original.y
-    case "z":
-      return original.z
-    case "-x":
-      return -original.x
-    case "-y":
-      return -original.y
-    case "-z":
-      return -original.z
-    default:
-      return 0
-  }
+/** Points include translation; shading normals use the inverse transpose. */
+export function transformTrianglesByMatrix(
+  triangles: Triangle[],
+  matrix: ReadonlyMat4,
+): Triangle[] {
+  const normalMatrix = mat3.normalFromMat4(mat3.create(), matrix)
+  if (!normalMatrix)
+    throw new Error("Cannot transform mesh normals with a singular matrix")
+  return triangles.map((triangle) => {
+    const normal = vec3.transformMat3(
+      vec3.create(),
+      [triangle.normal.x, triangle.normal.y, triangle.normal.z],
+      normalMatrix,
+    )
+    vec3.normalize(normal, normal)
+    return {
+      ...triangle,
+      vertices: triangle.vertices.map((vertex) => {
+        return applyMat4ToPoint3(matrix, vertex)
+      }) as [Point3, Point3, Point3],
+      normal: { x: normal[0]!, y: normal[1]!, z: normal[2]! },
+    }
+  })
 }
 
 export function transformTriangles(
   triangles: Triangle[],
   config: CoordinateTransformConfig,
 ): Triangle[] {
-  return triangles.map((triangle) => ({
-    ...triangle,
-    vertices: triangle.vertices.map((v) =>
-      applyCoordinateTransform(v, config),
-    ) as [Point3, Point3, Point3],
-    normal: applyCoordinateTransform(triangle.normal, config),
-  }))
+  return transformTrianglesByMatrix(
+    triangles,
+    getCoordinateTransformMatrix(config),
+  )
 }
 
 // Predefined transformation configs for common model orientations

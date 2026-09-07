@@ -114,7 +114,13 @@ export class GLTFBuilder {
     }
 
     // Apply transformations
-    meshData = transformMesh(meshData, { x: 0, y: 0, z: 0 }, box.rotation)
+    meshData = transformMesh(
+      meshData,
+      { x: 0, y: 0, z: 0 },
+      box.rotation,
+      undefined,
+      box.matrix,
+    )
     meshData = convertMeshToGLTFOrientation(meshData)
 
     // Create material
@@ -148,7 +154,7 @@ export class GLTFBuilder {
     this.nodes.push({
       name: box.label || `Box${nodeIndex}`,
       mesh: meshIndex,
-      translation: this.toGltfTranslation(box.center),
+      translation: box.matrix ? [0, 0, 0] : this.toGltfTranslation(box.center),
       ...this.getPoppyglNodeExtras(box),
     })
 
@@ -224,6 +230,8 @@ export class GLTFBuilder {
         meshData,
         { x: 0, y: 0, z: 0 },
         box.rotation,
+        undefined,
+        box.matrix,
       )
       const transformedMeshData = convertMeshToGLTFOrientation(translatedMesh)
 
@@ -249,7 +257,7 @@ export class GLTFBuilder {
     this.nodes.push({
       name: box.label || `OBJBox${nodeIndex}`,
       mesh: meshIndex,
-      translation: this.toGltfTranslation(box.center),
+      translation: box.matrix ? [0, 0, 0] : this.toGltfTranslation(box.center),
       ...this.getPoppyglNodeExtras(box),
     })
 
@@ -415,7 +423,13 @@ export class GLTFBuilder {
 
       const meshData: MeshData = { positions, normals, texcoords, indices }
       const transformedMeshData = convertMeshToGLTFOrientation(
-        transformMesh(meshData, { x: 0, y: 0, z: 0 }, box.rotation),
+        transformMesh(
+          meshData,
+          { x: 0, y: 0, z: 0 },
+          box.rotation,
+          undefined,
+          box.matrix,
+        ),
       )
 
       const positionAccessorIndex = this.addAccessor(
@@ -470,7 +484,7 @@ export class GLTFBuilder {
     this.nodes.push({
       name: box.label || `Box${nodeIndex}`,
       mesh: meshIndex,
-      translation: this.toGltfTranslation(box.center),
+      translation: box.matrix ? [0, 0, 0] : this.toGltfTranslation(box.center),
       ...this.getPoppyglNodeExtras(box),
     })
 
@@ -570,7 +584,13 @@ export class GLTFBuilder {
     for (const [faceName, faceData] of Object.entries(faceMeshes)) {
       // Apply transformations to each face
       const transformedFaceData = convertMeshToGLTFOrientation(
-        transformMesh(faceData, { x: 0, y: 0, z: 0 }, box.rotation),
+        transformMesh(
+          faceData,
+          { x: 0, y: 0, z: 0 },
+          box.rotation,
+          undefined,
+          box.matrix,
+        ),
       )
 
       // Create accessors for this face
@@ -626,7 +646,7 @@ export class GLTFBuilder {
     this.nodes.push({
       name: box.label || `Box${nodeIndex}`,
       mesh: meshIndex,
-      translation: this.toGltfTranslation(box.center),
+      translation: box.matrix ? [0, 0, 0] : this.toGltfTranslation(box.center),
       ...this.getPoppyglNodeExtras(box),
     })
 

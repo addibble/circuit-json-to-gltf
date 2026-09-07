@@ -18,16 +18,6 @@ export function getDefaultModelTransform(
     return options.coordinateTransform
   }
 
-  const modelBoardNormalDirection = cad.model_board_normal_direction
-
-  if (
-    modelBoardNormalDirection === "x-" ||
-    modelBoardNormalDirection === "y+" ||
-    modelBoardNormalDirection === "y-"
-  ) {
-    return COORDINATE_TRANSFORMS.IDENTITY
-  }
-
   if (options.usingGlbCoordinates) {
     return undefined
   }

@@ -101,6 +101,9 @@ export interface Box3D {
   center: Point3
   size: Size3
   rotation?: Point3
+  /** Local Scene3D Y-up mm -> world Scene3D Y-up mm, column-major.
+   * When present, replaces center/rotation as the mesh placement authority. */
+  matrix?: import("gl-matrix").ReadonlyMat4
   color?: Color
   sideColor?: Color
   texture?: {

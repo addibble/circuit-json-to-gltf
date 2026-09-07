@@ -95,6 +95,37 @@ The converter uses a modular architecture:
 
 ## Development
 
+### CAD placement coordinates
+
+CAD semantics are resolved by `getCadModelPlacement` from
+`@tscircuit/circuit-json-util` in Circuit JSON's **Z-up, millimeter** frame.
+Native format decoding remains in the loaders. Their normalization matrix is
+explicit, independent of `model_board_normal_direction`, and is not applied a
+second time to the source origin.
+
+Fitting uses native model axes before normal alignment, so an authored
+`6 x 4 x 20` size with a `y+` board normal produces `6 x 20 x 4` in the
+board-aligned frame instead of being shrunk against permuted target dimensions.
+Target size is already in millimeters, matching the viewer and shared resolver:
+`model_unit_to_mm_scale_factor` converts native vertices and origins, not the
+declared target size. Unlike older exporter revisions, a size of `1 x 1 x 1`
+with unit scale 2 fits to `1 x 1 x 1` mm; without a target size, the native
+geometry doubles. Board-surface origins are measured from
+contact vertices; they are separate from the scene target position.
+Generated footprinter models instead supply their known zero board datum, keeping
+through-hole pins below the mounting surface. Authored origins take precedence.
+
+The Scene3D adapter maps Circuit `(x, y, z)` to `(x, z, y)`. The final glTF
+adapter applies its existing X mirror and winding conversion. `Box3D.matrix`,
+when present, is the authoritative local-to-world Scene3D transform; `center`
+and `rotation` are not applied again. The old `transformMesh` Euler interface
+still uses its original `T * Rz * Rx * Ry(-y) * S` order, but CAD meshes use
+composed matrices instead. Legacy coordinates retain Number precision until glTF
+buffer encoding. JSCAD matrix plans are executed by the public
+`jscad-planner` interpreter, not an exporter-specific interpreter.
+The legacy `fitMeshToCadBounds` helper retains ratio 1 for flat axes; full CAD
+placement uses the shared resolver's native-size contract.
+
 ```bash
 # Install dependencies
 bun install

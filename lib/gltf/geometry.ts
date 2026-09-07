@@ -1,6 +1,12 @@
 import type { Point3, Size3, STLMesh, OBJMesh, Triangle } from "../types"
 import type { BoundingBox } from "../types"
 import { boundsOfPositions } from "../utils/bounding-box"
+import { mat3, vec3 } from "gl-matrix"
+import {
+  applyMat4ToPoint3,
+  mat4,
+  type ReadonlyMat4,
+} from "@tscircuit/circuit-json-util"
 
 export interface MeshData {
   positions: number[]
@@ -367,6 +373,7 @@ export function transformMesh(
   translation: Point3,
   rotation?: Point3,
   scale?: Point3,
+  placementMatrix?: ReadonlyMat4,
 ): MeshData {
   const result: MeshData = {
     positions: [...mesh.positions],
@@ -379,88 +386,45 @@ export function transformMesh(
     result.colors = [...mesh.colors]
   }
 
-  // Apply transformations to positions
+  // Public legacy rotation is radians, with order T * Rz * Rx * Ry(-y) * S.
+  // CAD callers pass their composed shared matrix instead of remapping Euler.
+  const legacyMatrix = mat4.fromTranslation(new Float64Array(16), [
+    translation.x,
+    translation.y,
+    translation.z,
+  ])
+  mat4.rotateZ(legacyMatrix, legacyMatrix, rotation?.z ?? 0)
+  mat4.rotateX(legacyMatrix, legacyMatrix, rotation?.x ?? 0)
+  mat4.rotateY(legacyMatrix, legacyMatrix, -(rotation?.y ?? 0))
+  mat4.scale(legacyMatrix, legacyMatrix, [
+    scale?.x ?? 1,
+    scale?.y ?? 1,
+    scale?.z ?? 1,
+  ])
+  const matrix = placementMatrix ?? legacyMatrix
+  const normalMatrix = mat3.normalFromMat4(new Float64Array(9), matrix)
+  if (!normalMatrix)
+    throw new Error("Cannot transform mesh normals with a singular matrix")
   for (let i = 0; i < result.positions.length; i += 3) {
-    let x = result.positions[i]!
-    let y = result.positions[i + 1]!
-    let z = result.positions[i + 2]!
-
-    // Apply scale
-    if (scale) {
-      x *= scale.x
-      y *= scale.y
-      z *= scale.z
-    }
-
-    // Apply rotation (simplified - proper rotation would use quaternions)
-    if (rotation) {
-      // Rotation around Y axis
-      const cosY = Math.cos(rotation.y)
-      const sinY = Math.sin(rotation.y)
-      const rx = x * cosY - z * sinY
-      const rz = x * sinY + z * cosY
-      x = rx
-      z = rz
-
-      // Rotation around X axis
-      const cosX = Math.cos(rotation.x)
-      const sinX = Math.sin(rotation.x)
-      const ry = y * cosX - z * sinX
-      const rz2 = y * sinX + z * cosX
-      y = ry
-      z = rz2
-
-      // Rotation around Z axis
-      const cosZ = Math.cos(rotation.z)
-      const sinZ = Math.sin(rotation.z)
-      const rx2 = x * cosZ - y * sinZ
-      const ry2 = x * sinZ + y * cosZ
-      x = rx2
-      y = ry2
-    }
-
-    // Apply translation
-    result.positions[i] = x + translation.x
-    result.positions[i + 1] = y + translation.y
-    result.positions[i + 2] = z + translation.z
+    const point = applyMat4ToPoint3(matrix, {
+      x: mesh.positions[i]!,
+      y: mesh.positions[i + 1]!,
+      z: mesh.positions[i + 2]!,
+    })
+    result.positions[i] = point.x
+    result.positions[i + 1] = point.y
+    result.positions[i + 2] = point.z
   }
-
-  // Also transform normals if there was rotation
-  if (rotation) {
-    for (let i = 0; i < result.normals.length; i += 3) {
-      let nx = result.normals[i]!
-      let ny = result.normals[i + 1]!
-      let nz = result.normals[i + 2]!
-
-      // Apply same rotations to normals
-      // Rotation around Y axis
-      const cosY = Math.cos(rotation.y)
-      const sinY = Math.sin(rotation.y)
-      const rnx = nx * cosY - nz * sinY
-      const rnz = nx * sinY + nz * cosY
-      nx = rnx
-      nz = rnz
-
-      // Rotation around X axis
-      const cosX = Math.cos(rotation.x)
-      const sinX = Math.sin(rotation.x)
-      const rny = ny * cosX - nz * sinX
-      const rnz2 = ny * sinX + nz * cosX
-      ny = rny
-      nz = rnz2
-
-      // Rotation around Z axis
-      const cosZ = Math.cos(rotation.z)
-      const sinZ = Math.sin(rotation.z)
-      const rnx2 = nx * cosZ - ny * sinZ
-      const rny2 = nx * sinZ + ny * cosZ
-      nx = rnx2
-      ny = rny2
-
-      result.normals[i] = nx
-      result.normals[i + 1] = ny
-      result.normals[i + 2] = nz
-    }
+  for (let i = 0; i < result.normals.length; i += 3) {
+    const normal = vec3.transformMat3(
+      new Float64Array(3),
+      [mesh.normals[i]!, mesh.normals[i + 1]!, mesh.normals[i + 2]!],
+      normalMatrix,
+    )
+    vec3.normalize(normal, normal)
+    result.normals[i] = normal[0]!
+    result.normals[i + 1] = normal[1]!
+    result.normals[i + 2] = normal[2]!
   }
 
   return result

@@ -1,4 +1,5 @@
 import type { Point3 } from "../types"
+import { applyMat4ToPoint3, mat4 } from "@tscircuit/circuit-json-util"
 
 /**
  * Apply a quaternion rotation to a point.
@@ -8,20 +9,7 @@ export function applyQuaternion(
   p: Point3,
   q: [number, number, number, number],
 ): Point3 {
-  const [qx, qy, qz, qw] = q
-  const { x, y, z } = p
-
-  // Quaternion rotation formula: p' = q * p * q^-1
-  const ix = qw * x + qy * z - qz * y
-  const iy = qw * y + qz * x - qx * z
-  const iz = qw * z + qx * y - qy * x
-  const iw = -qx * x - qy * y - qz * z
-
-  return {
-    x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
-    y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
-    z: iz * qw + iw * -qz + ix * -qy - iy * -qx,
-  }
+  return applyMat4ToPoint3(mat4.fromQuat(new Float64Array(16), q), p)
 }
 
 export interface NodeTransform {
@@ -35,35 +23,18 @@ export interface NodeTransform {
  * Order: scale -> rotate -> translate
  */
 export function applyNodeTransform(p: Point3, node: NodeTransform): Point3 {
-  let result = { ...p }
-
-  // Apply scale first
-  if (node.scale) {
-    result = {
-      x: result.x * node.scale[0]!,
-      y: result.y * node.scale[1]!,
-      z: result.z * node.scale[2]!,
-    }
-  }
-
-  // Apply rotation (quaternion)
-  if (node.rotation) {
-    result = applyQuaternion(
-      result,
-      node.rotation as [number, number, number, number],
-    )
-  }
-
-  // Apply translation
-  if (node.translation) {
-    result = {
-      x: result.x + node.translation[0]!,
-      y: result.y + node.translation[1]!,
-      z: result.z + node.translation[2]!,
-    }
-  }
-
-  return result
+  const rotation = node.rotation ?? [0, 0, 0, 1]
+  const translation = node.translation ?? [0, 0, 0]
+  const scale = node.scale ?? [1, 1, 1]
+  return applyMat4ToPoint3(
+    mat4.fromRotationTranslationScale(
+      new Float64Array(16),
+      [rotation[0]!, rotation[1]!, rotation[2]!, rotation[3]!],
+      [translation[0]!, translation[1]!, translation[2]!],
+      [scale[0]!, scale[1]!, scale[2]!],
+    ),
+    p,
+  )
 }
 
 /**

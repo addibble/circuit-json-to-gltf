@@ -20,6 +20,10 @@ test("child CAD size changes exported geometry for numeric and SI distances", as
       scale: 2,
     },
   ]
+  const measurements: {
+    bounds: ReturnType<typeof boundsOfTriangles>
+    scale: number
+  }[] = []
   for (const { name, size, scale } of cases) {
     const circuit = new Circuit()
     circuit.add(
@@ -51,13 +55,16 @@ test("child CAD size changes exported geometry for numeric and SI distances", as
       boardTextureResolution: 512,
     })
     if (!(glb instanceof ArrayBuffer)) throw new Error("Expected binary glTF")
+    // Snapshots document unfixed core; geometry assertions below require the fix.
     await expect(
       renderGlbToPng(glb, circuitJson, { width: 600, height: 500 }),
     ).toMatchPngSnapshot(import.meta.path, `child-cadmodel-size-${name}`)
 
     const part = getKeyedModelTriangles(glb)
     expect(part).toHaveLength(24)
-    const bounds = boundsOfTriangles(part)
+    measurements.push({ bounds: boundsOfTriangles(part), scale })
+  }
+  for (const { bounds, scale } of measurements) {
     const measuredSize = getBoundingBoxSize(bounds)
     expect(measuredSize.x).toBeCloseTo(6 * scale, 5)
     expect(measuredSize.y).toBeCloseTo(3 * scale, 5)

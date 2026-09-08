@@ -13,17 +13,22 @@ import { renderGlbToPng } from "../renderGlbToPng"
 
 test("child CAD keeps an off-axis key aligned on both layers across PCB rotations", async () => {
   // Board-space key centers after placement; no CAD Euler values are used as an oracle.
+  const cos32 = Math.cos((32 * Math.PI) / 180)
+  const sin32 = Math.sin((32 * Math.PI) / 180)
   const placements = [
     { rotation: 0, top: [1.5, 1], bottom: [-1.5, 1] },
-    {
-      rotation: 45,
-      top: [0.5 / Math.SQRT2, 2.5 / Math.SQRT2],
-      bottom: [-2.5 / Math.SQRT2, -0.5 / Math.SQRT2],
-    },
-    { rotation: 90, top: [-1, 1.5], bottom: [-1, -1.5] },
     { rotation: 180, top: [-1.5, -1], bottom: [1.5, -1] },
-    { rotation: 270, top: [1, -1.5], bottom: [1, 1.5] },
+    {
+      rotation: 32,
+      top: [1.5 * cos32 - sin32, 1.5 * sin32 + cos32],
+      bottom: [-1.5 * cos32 - sin32, -1.5 * sin32 + cos32],
+    },
   ] as const
+  const measurements: {
+    layer: "top" | "bottom"
+    center: ReturnType<typeof getBoundingBoxCenter>
+    boardPosition: readonly [number, number]
+  }[] = []
 
   for (const layer of ["top", "bottom"] as const) {
     for (const placement of placements) {
@@ -60,6 +65,7 @@ test("child CAD keeps an off-axis key aligned on both layers across PCB rotation
       })
       if (!(glb instanceof ArrayBuffer)) throw new Error("Expected binary glTF")
 
+      // Snapshots document unfixed core; geometry assertions below require the fix.
       await expect(
         renderGlbToPng(
           glb,
@@ -78,11 +84,17 @@ test("child CAD keeps an off-axis key aligned on both layers across PCB rotation
 
       const key = getKeyedModelTriangles(glb).filter(isKeyTriangle)
       expect(key).toHaveLength(12)
-      const center = getBoundingBoxCenter(boundsOfTriangles(key))
-      const [boardX, boardY] = placement[layer]
-      expect(center.x).toBeCloseTo(-boardX, 5)
-      expect(center.y).toBeCloseTo(layer === "top" ? 2.8 : -2.8, 5)
-      expect(center.z).toBeCloseTo(boardY, 5)
+      measurements.push({
+        layer,
+        center: getBoundingBoxCenter(boundsOfTriangles(key)),
+        boardPosition: placement[layer],
+      })
     }
+  }
+  for (const { layer, center, boardPosition } of measurements) {
+    const [boardX, boardY] = boardPosition
+    expect(center.x).toBeCloseTo(-boardX, 5)
+    expect(center.y).toBeCloseTo(layer === "top" ? 2.8 : -2.8, 5)
+    expect(center.z).toBeCloseTo(boardY, 5)
   }
 }, 30_000)

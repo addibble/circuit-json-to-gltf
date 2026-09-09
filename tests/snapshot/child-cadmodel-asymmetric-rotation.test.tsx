@@ -65,7 +65,6 @@ test("child CAD keeps an off-axis key aligned on both layers across PCB rotation
       })
       if (!(glb instanceof ArrayBuffer)) throw new Error("Expected binary glTF")
 
-      // Snapshots document unfixed core; geometry assertions below require the fix.
       await expect(
         renderGlbToPng(
           glb,

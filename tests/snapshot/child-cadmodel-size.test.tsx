@@ -55,7 +55,6 @@ test("child CAD size changes exported geometry for numeric and SI distances", as
       boardTextureResolution: 512,
     })
     if (!(glb instanceof ArrayBuffer)) throw new Error("Expected binary glTF")
-    // Snapshots document unfixed core; geometry assertions below require the fix.
     await expect(
       renderGlbToPng(glb, circuitJson, { width: 600, height: 500 }),
     ).toMatchPngSnapshot(import.meta.path, `child-cadmodel-size-${name}`)

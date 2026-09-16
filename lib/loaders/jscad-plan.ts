@@ -2,7 +2,7 @@ import * as jscadModeling from "@jscad/modeling"
 import * as geom3 from "@jscad/modeling/src/geometries/geom3"
 import type { Geom3 } from "@jscad/modeling/src/geometries/types"
 import { executeJscadOperations } from "jscad-planner"
-import type { STLMesh } from "../types"
+import type { Color, STLMesh } from "../types"
 import { boundsOfTriangles } from "../utils/bounding-box"
 import {
   COORDINATE_TRANSFORMS,
@@ -22,6 +22,11 @@ export const loadJscadPlan = (plan: unknown): STLMesh => {
     geom3ToTriangles(zUpGeometry, polygons),
     JSCAD_PLAN_TRANSFORM,
   )
+  // JSCAD uses linear 0..1 RGB; scene Color tuples use 0..255 RGB and 0..1 alpha.
+  const rgba = zUpGeometry.color
+  const color: Color | undefined = rgba
+    ? [rgba[0] * 255, rgba[1] * 255, rgba[2] * 255, rgba[3] ?? 1]
+    : undefined
 
   // Bounds come from the triangles this mesh ships, not from measuring the
   // source Geom3: the geometry stays Z-up and only the triangles are remapped,
@@ -32,5 +37,6 @@ export const loadJscadPlan = (plan: unknown): STLMesh => {
   return {
     triangles,
     boundingBox: boundsOfTriangles(triangles),
+    ...(color ? { color } : {}),
   }
 }

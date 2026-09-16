@@ -1,4 +1,5 @@
 import { cju, findBoundsAndCenter } from "@tscircuit/circuit-json-util"
+import { isAssemblyHardwareString } from "@tscircuit/jscad-assembly-hardware"
 import type {
   CadComponent,
   CircuitJson,
@@ -30,6 +31,7 @@ import {
 import { getDefaultModelTransform } from "../utils/get-default-model-transform"
 import {
   getBoundingBoxSize,
+  rotateMesh,
   scaleMesh,
   translateMesh,
 } from "../utils/mesh-scale"
@@ -483,6 +485,7 @@ export async function convertCircuitJsonTo3D(
       usingStepFormat,
       hasFootprinterModel,
     })
+    let hardwareRotation: CadComponent["rotation"]
 
     if (model_stl_url) {
       box.mesh = await loadSTL({
@@ -529,12 +532,20 @@ export async function convertCircuitJsonTo3D(
       }
     } else if (model_jscad) {
       box.mesh = loadJscadPlan(model_jscad)
-      box.color = componentColor
+      box.color = box.mesh.color ?? componentColor
     } else if (hasFootprinterModel && cad.footprinter_string) {
       box.mesh = await loadFootprinterModel(
         cad.footprinter_string,
         defaultTransform,
       )
+      if (
+        box.mesh &&
+        cad.rotation &&
+        !coordinateTransform &&
+        isAssemblyHardwareString(cad.footprinter_string)
+      ) {
+        hardwareRotation = cad.rotation
+      }
     }
 
     if (box.mesh && modelScaleFactor !== 1) {
@@ -567,6 +578,20 @@ export async function convertCircuitJsonTo3D(
         )
       }
 
+      if (hardwareRotation) {
+        // Hardware carries core's complete XYZ Euler placement. After the
+        // footprinter loader's (x,z,y) frame swap, Rx Ry Rz becomes
+        // Rx(-x) Rz(-y) Ry(-z). Bake it before the legacy scene Euler path,
+        // whose order is different; ordinary electronic models stay unchanged.
+        box.mesh = rotateMesh(
+          rotateMesh(
+            rotateMesh(box.mesh, { x: 0, y: -hardwareRotation.z, z: 0 }),
+            { x: 0, y: 0, z: -hardwareRotation.y },
+          ),
+          { x: -hardwareRotation.x, y: 0, z: 0 },
+        )
+        box.rotation = undefined
+      }
       box.size = getBoundingBoxSize(box.mesh.boundingBox)
     }
 

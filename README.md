@@ -17,6 +17,21 @@ Converts circuit JSON to 3D GLTF files. Used for exporting circuits as 3D models
 - Automatic component positioning and generic 3D representations
 - Customizable camera, lighting, and material settings
 
+### Mounting hardware
+
+`cad_component.footprinter_string` accepts screw, bolt, heat-set insert, and
+spacer modelprinter strings through `jscad-electronics`. These are physical
+catalogue meshes, not component bounding boxes. Steel, black-oxide, and brass
+colors survive export; an explicit color in a baked JSCAD plan also takes
+precedence over the generic component color.
+
+Core supplies the complete hardware placement as native-datum `position` and
+XYZ Euler `rotation`, in Z-up millimeters. Set `model_origin_position` to
+`{ x: 0, y: 0, z: 0 }` to preserve the catalogue datum instead of inferring a
+bounding-box center. Hardware rotations are composed
+before export's scene-axis conversion without changing placement of ordinary
+electronic models.
+
 ## Installation
 
 ```bash

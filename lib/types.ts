@@ -69,6 +69,7 @@ export interface BoundingBox {
 export interface STLMesh {
   triangles: Triangle[]
   boundingBox: BoundingBox
+  color?: Color
 }
 
 export interface OBJMesh extends STLMesh {

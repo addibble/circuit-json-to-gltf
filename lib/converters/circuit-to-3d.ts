@@ -29,6 +29,7 @@ import {
   getMeshWithBoardNormalTransform,
 } from "../utils/cad-mesh-placement"
 import { getDefaultModelTransform } from "../utils/get-default-model-transform"
+import { COORDINATE_TRANSFORMS } from "../utils/coordinate-transform"
 import {
   getBoundingBoxSize,
   rotateMesh,
@@ -541,7 +542,8 @@ export async function convertCircuitJsonTo3D(
       if (
         box.mesh &&
         cad.rotation &&
-        !coordinateTransform &&
+        defaultTransform ===
+          COORDINATE_TRANSFORMS.FOOTPRINTER_MODEL_TRANSFORM &&
         isAssemblyHardwareString(cad.footprinter_string)
       ) {
         hardwareRotation = cad.rotation

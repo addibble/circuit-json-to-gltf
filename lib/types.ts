@@ -108,9 +108,16 @@ export interface OBJMaterial {
 
 export type Color = string | [number, number, number, number]
 
+/** Intermediate geometry in S=(project.x,project.z,project.y), +Y up, mm.
+ * The Y/Z swap reverses handedness relative to Circuit JSON; final glTF
+ * conversion mirrors X. Native loader/origin policies are applied beforehand.
+ */
 export interface Box3D {
   center: Point3
   size: Size3
+  /** Project intrinsic XYZ angles in radians, stored as (thetaX,thetaZ,thetaY).
+   * Not standard scene Euler angles; consumed by geometry.transformMesh.
+   */
   rotation?: Point3
   color?: Color
   sideColor?: Color
@@ -131,6 +138,7 @@ export interface Box3D {
   showHiddenEdges?: boolean
 }
 
+/** Retains the intermediate reflected Y-up frame described by Box3D. */
 export interface Scene3D {
   boxes: Box3D[]
   camera?: Camera3D

@@ -1,6 +1,8 @@
 import type { Point3, Size3, STLMesh, OBJMesh, Triangle } from "../types"
 import type { BoundingBox } from "../types"
 import { boundsOfPositions } from "../utils/bounding-box"
+import * as mat4 from "@jscad/modeling/src/maths/mat4"
+import * as vec3 from "@jscad/modeling/src/maths/vec3"
 
 export interface MeshData {
   positions: number[]
@@ -362,6 +364,18 @@ export function createMeshFromOBJ(
     : [{ meshData: createMeshFromSTL(objMesh), materialIndex: -1 }]
 }
 
+/**
+ * Positions/translation are in Scene3D S=(P.x,P.z,P.y), +Y up, mm.
+ * `rotation` stores project CAD angles in radians as (thetaX,thetaZ,thetaY);
+ * these are NOT ordinary right-handed scene Euler angles.
+ *
+ * Match 3d-viewer's intrinsic XYZ placement: R_P=Rx(thetaX)Ry(thetaY)Rz(thetaZ).
+ * The Y/Z swap A reverses handedness, so R_S=A R_P A^-1 is
+ * Rx(-rotation.x) Rz(-rotation.z) Ry(-rotation.y). Points experience
+ * scene -Y, then -Z, then -X rotations (project +Z, then +Y, then +X).
+ * Apply scene-axis scale first and scene translation last. Normals use the
+ * same rotation without translation; existing scale handling is unchanged.
+ */
 export function transformMesh(
   mesh: MeshData,
   translation: Point3,
@@ -378,6 +392,17 @@ export function transformMesh(
   if (mesh.colors) {
     result.colors = [...mesh.colors]
   }
+  const rotationMatrix = rotation
+    ? mat4.multiply(
+        mat4.create(),
+        mat4.multiply(
+          mat4.create(),
+          mat4.fromXRotation(mat4.create(), -rotation.x),
+          mat4.fromZRotation(mat4.create(), -rotation.z),
+        ),
+        mat4.fromYRotation(mat4.create(), -rotation.y),
+      )
+    : undefined
 
   // Apply transformations to positions
   for (let i = 0; i < result.positions.length; i += 3) {
@@ -392,31 +417,11 @@ export function transformMesh(
       z *= scale.z
     }
 
-    // Apply rotation (simplified - proper rotation would use quaternions)
-    if (rotation) {
-      // Rotation around Y axis
-      const cosY = Math.cos(rotation.y)
-      const sinY = Math.sin(rotation.y)
-      const rx = x * cosY - z * sinY
-      const rz = x * sinY + z * cosY
-      x = rx
-      z = rz
-
-      // Rotation around X axis
-      const cosX = Math.cos(rotation.x)
-      const sinX = Math.sin(rotation.x)
-      const ry = y * cosX - z * sinX
-      const rz2 = y * sinX + z * cosX
-      y = ry
-      z = rz2
-
-      // Rotation around Z axis
-      const cosZ = Math.cos(rotation.z)
-      const sinZ = Math.sin(rotation.z)
-      const rx2 = x * cosZ - y * sinZ
-      const ry2 = x * sinZ + y * cosZ
-      x = rx2
-      y = ry2
+    if (rotationMatrix) {
+      const rotated = vec3.transform(vec3.create(), [x, y, z], rotationMatrix)
+      x = rotated[0]
+      y = rotated[1]
+      z = rotated[2]
     }
 
     // Apply translation
@@ -426,46 +431,27 @@ export function transformMesh(
   }
 
   // Also transform normals if there was rotation
-  if (rotation) {
+  if (rotationMatrix) {
     for (let i = 0; i < result.normals.length; i += 3) {
-      let nx = result.normals[i]!
-      let ny = result.normals[i + 1]!
-      let nz = result.normals[i + 2]!
-
-      // Apply same rotations to normals
-      // Rotation around Y axis
-      const cosY = Math.cos(rotation.y)
-      const sinY = Math.sin(rotation.y)
-      const rnx = nx * cosY - nz * sinY
-      const rnz = nx * sinY + nz * cosY
-      nx = rnx
-      nz = rnz
-
-      // Rotation around X axis
-      const cosX = Math.cos(rotation.x)
-      const sinX = Math.sin(rotation.x)
-      const rny = ny * cosX - nz * sinX
-      const rnz2 = ny * sinX + nz * cosX
-      ny = rny
-      nz = rnz2
-
-      // Rotation around Z axis
-      const cosZ = Math.cos(rotation.z)
-      const sinZ = Math.sin(rotation.z)
-      const rnx2 = nx * cosZ - ny * sinZ
-      const rny2 = nx * sinZ + ny * cosZ
-      nx = rnx2
-      ny = rny2
-
-      result.normals[i] = nx
-      result.normals[i + 1] = ny
-      result.normals[i + 2] = nz
+      const normal = vec3.transform(
+        vec3.create(),
+        [result.normals[i]!, result.normals[i + 1]!, result.normals[i + 2]!],
+        rotationMatrix,
+      )
+      result.normals[i] = normal[0]
+      result.normals[i + 1] = normal[1]
+      result.normals[i + 2] = normal[2]
     }
   }
 
   return result
 }
 
+/**
+ * Scene S=(Px,Pz,Py) -> final glTF G=(-Px,Pz,Py), +Y up, mm.
+ * Mirror X for both positions and normals; reverse triangle winding because
+ * this last S->G step has determinant -1. The complete P->G map has +1.
+ */
 export function convertMeshToGLTFOrientation(mesh: MeshData): MeshData {
   const result: MeshData = {
     positions: [...mesh.positions],

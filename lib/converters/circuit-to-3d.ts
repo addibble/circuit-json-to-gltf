@@ -62,6 +62,7 @@ const COPPER_THICKNESS = 0.035
 const FAUX_BOARD_MARGIN = 2
 const DEFAULT_FAUX_BOARD_SIZE = 10
 
+/** Convert degrees to radians only; the caller has already swapped Y/Z fields. */
 function convertRotationFromCadRotation(rot: {
   x: number
   y: number
@@ -438,7 +439,8 @@ export async function convertCircuitJsonTo3D(
           z: pcbComponent?.height ?? 2,
         }
 
-    // Determine position
+    // Project P is right-handed Z-up mm; Scene3D stores S=(Px,Pz,Py).
+    // This is a reflected Y-up basis, not a proper rotation of the model.
     const center = cad.position
       ? {
           x: cad.position.x,
@@ -501,9 +503,9 @@ export async function convertCircuitJsonTo3D(
         : undefined)
     // Add rotation if specified
     if (cadRotation) {
-      // For GLB/GLTF models, we need to remap rotation axes because the coordinate
-      // system has Y and Z swapped. Circuit JSON uses Z-up, but the transformed
-      // model uses Y-up.
+      // All CAD formats store radians as (thetaX,thetaZ,thetaY) in Box3D.
+      // transformMesh conjugates intrinsic XYZ through the reflected S/P basis;
+      // merely swapping these fields is not enough to define scene Euler angles.
       box.rotation = convertRotationFromCadRotation({
         x: cadRotation.x,
         y: cadRotation.z, // Circuit Z rotation becomes model Y rotation
@@ -515,7 +517,7 @@ export async function convertCircuitJsonTo3D(
         box.rotation = convertRotationFromCadRotation({
           x: 0,
           y: 0,
-          z: 180, // Flip via Z rotation for GLB models (matches circuit JSON convention)
+          z: 180, // Scene z field carries the implicit project Y half-turn.
         })
       } else {
         box.rotation = convertRotationFromCadRotation({

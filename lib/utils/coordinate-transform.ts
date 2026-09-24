@@ -1,5 +1,11 @@
 import type { CoordinateTransformConfig, Point3, Triangle } from "../types"
 
+/**
+ * Asset-loader basis operation, not CAD placement: map/flip native axes, then
+ * rotate about the resulting fixed X, Y, Z axes in that order, in degrees.
+ * No translation or unit conversion; applies to positions and directions.
+ * CAD intrinsic XYZ instead runs through geometry.transformMesh in Scene3D.
+ */
 export function applyCoordinateTransform(
   point: Point3,
   config: CoordinateTransformConfig,

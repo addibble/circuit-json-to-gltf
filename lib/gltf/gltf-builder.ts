@@ -113,7 +113,8 @@ export class GLTFBuilder {
       meshData = createBoxMesh(box.size)
     }
 
-    // Apply transformations
+    // Bake CAD rotation in local Scene3D axes, then S->G; box.center is
+    // translated separately by toGltfTranslation using that same X mirror.
     meshData = transformMesh(meshData, { x: 0, y: 0, z: 0 }, box.rotation)
     meshData = convertMeshToGLTFOrientation(meshData)
 
@@ -709,6 +710,7 @@ export class GLTFBuilder {
     return meshIndex
   }
 
+  /** World point S->G in mm; matches convertMeshToGLTFOrientation's X mirror. */
   private toGltfTranslation(center: Box3D["center"]): [number, number, number] {
     return [-center.x, center.y, center.z]
   }

@@ -386,15 +386,15 @@ export function transformMesh(
     result.colors = [...mesh.colors]
   }
 
-  // Public legacy rotation is radians, with order T * Rz * Rx * Ry(-y) * S.
+  // Public legacy rotation is radians, with order T * Rz(-z) * Rx(-x) * Ry(-y) * S.
   // CAD callers pass their composed shared matrix instead of remapping Euler.
   const legacyMatrix = mat4.fromTranslation(new Float64Array(16), [
     translation.x,
     translation.y,
     translation.z,
   ])
-  mat4.rotateZ(legacyMatrix, legacyMatrix, rotation?.z ?? 0)
-  mat4.rotateX(legacyMatrix, legacyMatrix, rotation?.x ?? 0)
+  mat4.rotateZ(legacyMatrix, legacyMatrix, -(rotation?.z ?? 0))
+  mat4.rotateX(legacyMatrix, legacyMatrix, -(rotation?.x ?? 0))
   mat4.rotateY(legacyMatrix, legacyMatrix, -(rotation?.y ?? 0))
   mat4.scale(legacyMatrix, legacyMatrix, [
     scale?.x ?? 1,

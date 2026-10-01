@@ -21,7 +21,19 @@ export function foldRigidBox(
   const source = box.mesh
     ? createMeshFromSTL(box.mesh)
     : createBoxMesh(box.size)
-  const rotated = transformMesh(source, { x: 0, y: 0, z: 0 }, box.rotation)
+  const localMatrix = box.matrix ? new Float64Array(box.matrix) : undefined
+  if (localMatrix) {
+    localMatrix[12] = 0
+    localMatrix[13] = 0
+    localMatrix[14] = 0
+  }
+  const rotated = transformMesh(
+    source,
+    { x: 0, y: 0, z: 0 },
+    box.rotation,
+    undefined,
+    localMatrix,
+  )
   const center = {
     x: box.center.x - boardCenter.x,
     y: box.center.z - boardCenter.y,
@@ -86,6 +98,7 @@ export function foldRigidBox(
       z: movedCenter.y + boardCenter.y,
     },
     rotation: undefined,
+    matrix: undefined,
     mesh: { ...box.mesh, triangles, boundingBox },
   }
 }

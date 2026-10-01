@@ -38,7 +38,7 @@ function getSceneNormalMatrix(
     CAD_TO_SCENE_MATRIX,
     mat4.fromQuat(
       new Float64Array(16),
-      getCadModelBoardNormalQuaternion(modelBoardNormalDirection),
+      getCadModelBoardNormalQuaternion(modelBoardNormalDirection ?? undefined),
     ),
     CAD_TO_SCENE_MATRIX,
   )
@@ -195,6 +195,10 @@ export function placeCadMesh<T extends STLMesh | OBJMesh>(
   nativeToScene: ReadonlyMat4,
   options: { boardContactPoint?: Point3 } = {},
 ): { mesh: T; matrix: mat4 } {
+  const placementCad = {
+    ...cad,
+    model_board_normal_direction: cad.model_board_normal_direction ?? undefined,
+  }
   const sceneToNative = mat4.invert(new Float64Array(16), nativeToScene)
   if (!sceneToNative) throw new Error("CAD loader transform must be invertible")
   const nativeMesh = applyMeshMatrix(mesh, sceneToNative)
@@ -210,7 +214,7 @@ export function placeCadMesh<T extends STLMesh | OBJMesh>(
       mat4.fromQuat(
         new Float64Array(16),
         getCadModelBoardNormalQuaternion(
-          cad.model_board_normal_direction,
+          placementCad.model_board_normal_direction,
           nativeToCanonicalModel,
         ),
       ),
@@ -218,6 +222,7 @@ export function placeCadMesh<T extends STLMesh | OBJMesh>(
     )
     const alignedMesh = applyMeshMatrix(nativeMesh, aligned)
     const minZ = alignedMesh.boundingBox.min.z
+    const maxZ = alignedMesh.boundingBox.max.z
     const tolerance = Math.max(
       1e-6,
       (alignedMesh.boundingBox.max.z - minZ) * 1e-5,
@@ -236,12 +241,18 @@ export function placeCadMesh<T extends STLMesh | OBJMesh>(
     if (!inverse) throw new Error("CAD normal alignment must be invertible")
     const native = vec3.transformMat4(
       new Float64Array(3),
-      [contactCenter.x, contactCenter.y, minZ],
+      [
+        contactCenter.x,
+        contactCenter.y,
+        // Through-hole models commonly straddle their native board datum.
+        // Keep that datum instead of mistaking pin tips for the board plane.
+        minZ <= 0 && maxZ >= 0 ? 0 : minZ,
+      ],
       inverse,
     )
     boardContactPoint = { x: native[0]!, y: native[1]!, z: native[2]! }
   }
-  const placement = getCadModelPlacement(cad, {
+  const placement = getCadModelPlacement(placementCad, {
     nativeBounds: nativeMesh.boundingBox,
     nativeToCanonicalModel,
     sizeSpace: "native",

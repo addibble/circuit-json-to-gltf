@@ -19,8 +19,8 @@ test("legacy mesh Euler order and decoder order remain distinct matrix compositi
   )
   const meshMatrix = composeMat4(
     mat4.fromTranslation(new Float64Array(16), [11, 13, 17]),
-    mat4.fromZRotation(new Float64Array(16), rotation.z * rad),
-    mat4.fromXRotation(new Float64Array(16), rotation.x * rad),
+    mat4.fromZRotation(new Float64Array(16), -rotation.z * rad),
+    mat4.fromXRotation(new Float64Array(16), -rotation.x * rad),
     mat4.fromYRotation(new Float64Array(16), -rotation.y * rad),
     mat4.fromScaling(new Float64Array(16), [2, 3, 4]),
   )
